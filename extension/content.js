@@ -23,7 +23,8 @@ let liveChecks = [];
 let lastCheckedBufferLength = 0;
 let liveCheckInFlight = false;
 const root = document.createElement('div'); root.id = 'truthcheck-root';
-root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
+root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results" class="tc-ui"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
+root.insertAdjacentHTML('afterbegin', `<style>${TC.CSS}</style>`);
 document.documentElement.append(root);
 const $ = s => root.querySelector(s); const panel = $('#tc-panel');
 $('.tc-close').onclick = () => panel.classList.remove('open');
@@ -183,10 +184,10 @@ function renderLiveChecks() {
 function liveCard(item) {
   const status = item.verdict === 'unsure' ? 'uncertain' : item.verdict;
   const icon = status === 'true' ? '✓' : status === 'false' ? '×' : '!';
-  return `<article class="tc-card ${status}"><div class="tc-verdict"><span>${icon}</span>${item.verdict?.toUpperCase()}</div><h3>${escapeHtml(item.header)}</h3><p>${escapeHtml(item.explanation)}</p><div class="tc-detail">${item.confidence != null ? `<div class="tc-meta">${Math.round(item.confidence * 100)}% confidence</div>` : ''}<b>Statement</b><p class="tc-quote">${escapeHtml(item.statement)}</p><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`;
+  return `<article class="tc-card ${status}"><div class="tc-verdict"><span>${icon}</span>${item.verdict?.toUpperCase()}</div><h3>${TC.escapeHtml(item.header)}</h3><p>${TC.escapeHtml(item.explanation)}</p><div class="tc-detail">${item.confidence != null ? `<div class="tc-meta">${Math.round(item.confidence * 100)}% confidence</div>` : ''}<b>Statement</b><p class="tc-quote">${TC.escapeHtml(item.statement)}</p><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${TC.escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`;
 }
-function renderEmpty(message) { $('#tc-results').innerHTML = `<div class="tc-empty"><b>${message}</b></div>`; }
-function renderLoading() { $('#tc-results').innerHTML = `<div class="tc-loading"><i></i><i></i><i></i><p>Finding claims and checking evidence…</p></div>`; }
+function renderEmpty(message) { $('#tc-results').innerHTML = TC.emptyHtml(message); }
+function renderLoading() { $('#tc-results').innerHTML = TC.loadingHtml(); }
 async function analyze() {
   if (!videoId()) { renderEmpty('Open a YouTube watch page to analyze a video.'); return; }
   renderLoading(); $('#tc-analyze').disabled = true;
@@ -232,7 +233,7 @@ function updateLiveClaims(initial = false) {
   renderCards(liveAnalysis.revealed, liveAnalysis.demo, `${liveAnalysis.claims.length} tracked`);
 }
 function renderCards(claims, demo, meta = `${claims.length} claims`) {
-  $('#tc-results').innerHTML = `${demo ? '<div class="tc-demo">Demo results</div>' : ''}<h2>Analysis <em>${meta}</em></h2>${claims.map(card).join('')}`;
+  $('#tc-results').innerHTML = `${demo ? '<div class="tc-demo">Demo results</div>' : ''}<h2>Analysis <em>${meta}</em></h2>${claims.map(item => TC.card(item)).join('')}`;
   root.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
     if (event.target.closest('a')) return;
     el.classList.toggle('expanded');
@@ -241,5 +242,3 @@ function renderCards(claims, demo, meta = `${claims.length} claims`) {
     if (Number.isFinite(time) && player && el.classList.contains('expanded')) player.currentTime = time;
   }));
 }
-function card(item) { const status = item.verdict?.toLowerCase() || 'uncertain'; const time = Number.isFinite(item.timestamp) ? `${Math.floor(item.timestamp / 60)}:${String(Math.floor(item.timestamp % 60)).padStart(2, '0')}` : ''; return `<article class="tc-card ${status}" data-time="${item.timestamp}"><div class="tc-verdict"><span>${status === 'true' ? '✓' : status === 'false' ? '×' : '!'}</span>${item.verdict}</div><h3>${escapeHtml(item.claim)}</h3><p>${escapeHtml(item.explanation)}</p><div class="tc-detail"><div class="tc-meta">${time ? `Jump to ${time}` : ''} ${item.confidence ? ` · ${Math.round(item.confidence * 100)}% confidence` : ''}</div><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`; }
-function escapeHtml(value) { const node = document.createElement('span'); node.textContent = value || ''; return node.innerHTML; }
