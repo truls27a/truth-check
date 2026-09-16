@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TruthCheck Architecture",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "live-check", "label": "Live YouTube fact-check", "focus": ["content", "background", "index", "liveCheck", "llm"], "note": "Continuous background checking of live YouTube captions as the video plays." },
+      { "id": "batch-analyze", "label": "Analyze video (batch)", "focus": ["content", "background", "index", "transcript", "claimsVerify", "llm"], "note": "On-click extraction and verification of up to five claims from the full transcript." },
+      { "id": "selection", "label": "Fact-check a selection", "focus": ["background", "selection", "index", "selectionServer", "llm"], "note": "Right-click any selected text on any website to check it." },
+      { "id": "provider-switch", "label": "OpenAI vs. local Ollama", "focus": ["llm", "openai", "ollama"], "note": "generateStructured() sends every prompt to whichever provider LLM_PROVIDER selects." }
+    ]
+  },
+  "layout": { "mode": "grid", "cols": 5, "cellW": 128, "cellH": 80, "gapX": 54, "gapY": 16, "origin": [30, 30] },
+  "components": [
+    { "id": "content", "type": "frontend", "label": "content.js", "sublabel": "YouTube panel + captions", "row": 0, "col": 0 },
+    { "id": "background", "type": "frontend", "label": "background.js", "sublabel": "service worker", "tag": "fetch proxy", "row": 1, "col": 0 },
+    { "id": "youtube", "type": "external", "label": "YouTube", "sublabel": "watch page + captions", "row": 0, "col": 1 },
+    { "id": "selection", "type": "frontend", "label": "selection.js", "sublabel": "floating card", "row": 2, "col": 1 },
+    { "id": "index", "type": "backend", "label": "index.js", "sublabel": "HTTP router", "tag": "no framework", "row": 1, "col": 2 },
+    { "id": "transcript", "type": "backend", "label": "transcript.js", "sublabel": "fetch captionTracks", "row": 0, "col": 3 },
+    { "id": "claimsVerify", "type": "backend", "label": "Claim Verify", "sublabel": "claims.js + verify.js", "row": 1, "col": 3 },
+    { "id": "selectionServer", "type": "backend", "label": "Selection Verify", "sublabel": "selection.js (server)", "row": 2, "col": 3 },
+    { "id": "liveCheck", "type": "backend", "label": "Live Agent", "sublabel": "liveCheck.js", "tag": "system prompt", "row": 3, "col": 3 },
+    { "id": "llm", "type": "backend", "label": "LLM Gateway", "sublabel": "generateStructured()", "row": 1, "col": 4 },
+    { "id": "openai", "type": "external", "label": "OpenAI", "sublabel": "web_search", "row": 0, "col": 4 },
+    { "id": "ollama", "type": "external", "label": "Ollama", "sublabel": "local, JSON mode", "row": 2, "col": 4 }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Chrome Extension (Manifest V3)", "wraps": ["content", "background", "selection"] },
+    { "kind": "region", "label": "Local Backend — Node http, no framework", "wraps": ["index", "transcript", "claimsVerify", "selectionServer", "liveCheck", "llm"] }
+  ],
+  "connections": [
+    { "id": "content-background", "from": "content", "to": "background", "label": "tc-fetch proxy", "variant": "emphasis", "labelDy": 24 },
+    { "id": "content-youtube", "from": "content", "to": "youtube", "label": "scrape live caption DOM", "variant": "dashed", "labelDy": 54 },
+    { "id": "background-selection", "from": "background", "to": "selection", "label": "inject card" },
+    { "id": "background-index", "from": "background", "to": "index", "label": "proxied fetch", "variant": "emphasis" },
+    { "id": "index-transcript", "from": "index", "to": "transcript", "label": "fetch captions", "fromSide": "top", "toSide": "bottom" },
+    { "id": "index-claimsverify", "from": "index", "to": "claimsVerify", "label": "extract + verify", "fromSide": "right", "toSide": "left", "labelDy": -24 },
+    { "id": "index-selectionserver", "from": "index", "to": "selectionServer", "label": "verify selection", "fromSide": "bottom", "toSide": "top", "labelSegment": 2 },
+    { "id": "index-livecheck", "from": "index", "to": "liveCheck", "label": "check live excerpt", "fromSide": "bottom", "toSide": "left", "labelSegment": 2, "labelDy": 27 },
+    { "id": "transcript-youtube", "from": "transcript", "to": "youtube", "label": "captionTracks + timedtext" },
+    { "id": "claimsverify-llm", "from": "claimsVerify", "to": "llm" },
+    { "id": "selectionserver-llm", "from": "selectionServer", "to": "llm" },
+    { "id": "livecheck-llm", "from": "liveCheck", "to": "llm" },
+    { "id": "llm-openai", "from": "llm", "to": "openai", "label": "Responses API" },
+    { "id": "llm-ollama", "from": "llm", "to": "ollama", "label": "/api/chat", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Three entry points", "items": ["Live captions (background)", "Analyze video (batch)", "Right-click selection"] },
+    { "dot": "emerald", "title": "Demo mode", "items": ["DEMO_MODE=true default — no API key needed"] },
+    { "dot": "amber", "title": "Config + PNA", "items": ["LLM_PROVIDER=openai/ollama in .env", "background.js proxies fetches past Chrome's Private Network Access block"] }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "TruthCheck — Live YouTube Fact-Check Flow",
+    "output": "live-check-workflow.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "extension", "label": "Chrome Extension" },
+    { "id": "backend", "label": "Backend Service" },
+    { "id": "llmlane", "label": "LLM Provider" }
+  ],
+  "phases": [
+    { "id": "capture", "label": "Capture", "fromCol": 0, "toCol": 1 },
+    { "id": "check", "label": "Check", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "reason", "label": "Reason", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+  ],
+  "mainPath": ["caption_dom", "scraper", "proxy", "agent", "provider"],
+  "nodes": [
+    { "id": "caption_dom", "lane": "extension", "col": 0, "type": "external", "label": "Live Captions", "sublabel": "rendered by the player", "width": 140 },
+    { "id": "scraper", "lane": "extension", "col": 1, "type": "frontend", "label": "Caption Scraper", "sublabel": "content.js: MutationObserver", "width": 140 },
+    { "id": "proxy", "lane": "extension", "col": 2, "type": "frontend", "label": "Fetch Proxy", "sublabel": "background.js, every 8s", "width": 140 },
+    { "id": "live_window", "lane": "extension", "col": 3, "type": "frontend", "label": "Live Fact-Checks", "sublabel": "verdict card renders", "width": 140 },
+    { "id": "agent", "lane": "backend", "col": 3, "type": "backend", "label": "Live Fact-Check Agent", "sublabel": "liveCheck.js", "tag": "system prompt", "width": 140 },
+    { "id": "provider", "lane": "llmlane", "col": 4, "type": "external", "label": "LLM Provider", "sublabel": "OpenAI or local Ollama", "width": 140 }
+  ],
+  "edges": [
+    { "id": "dom-scraper", "from": "caption_dom", "to": "scraper", "label": "on-screen text", "role": "main" },
+    { "id": "scraper-proxy", "from": "scraper", "to": "proxy", "label": "new captionBuffer text", "role": "main" },
+    { "id": "proxy-agent", "from": "proxy", "to": "agent", "label": "POST /api/live-check", "variant": "emphasis", "role": "main" },
+    { "id": "agent-provider", "from": "agent", "to": "provider", "label": "generateStructured()", "role": "main" },
+    { "id": "provider-window", "from": "provider", "to": "live_window", "label": "verdict + confidence + sources", "variant": "emphasis", "role": "return" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Skips gracefully", "items": ["Paused video → no poll", "No statement yet → no card"] },
+    { "dot": "emerald", "title": "Demo mode", "items": ["DEMO_MODE=true cycles canned examples, no key needed"] }
+  ]
+}
