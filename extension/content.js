@@ -19,6 +19,13 @@ const focuses = [
 ];
 let activeVideoId = videoId();
 let liveAnalysis = null;
+// The claim currently shown by the single-claim evidence rail (#tc-results),
+// and its sibling list — populated by both the one-shot analyze() path and
+// the live-reveal path in updateLiveClaims().
+let railClaims = [];
+let railIndex = 0;
+let railDemo = false;
+let railRemaining = null;
 // Every const/let referenced (even transitively) by the synchronous init
 // block below — through line 34's watchCaptions(onCaptionText) call, which
 // synchronously runs tryAttach() → watchContainer() → onCaption() if the
@@ -37,7 +44,7 @@ let liveNotice = null;
 let liveBackoffUntil = 0;
 let liveAllowanceUsed = false;
 const root = document.createElement('div'); root.id = 'truthcheck-root';
-root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results" class="tc-ui"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
+root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list" class="tc-ui"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" class="tc-ui" aria-label="TruthCheck panel"><div class="rail-head"><div>${TC.icons.logo}<span>TruthCheck</span></div><button class="tc-close" aria-label="Close evidence panel">${TC.icons.close}</button></div><div class="tc-scroll"><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></div><div class="rail-controls" id="tc-rail-controls" hidden><button id="tc-prev" aria-label="Previous claim">${TC.icons.arrowLeft}</button><span id="tc-rail-count"></span><button id="tc-next" aria-label="Next claim">${TC.icons.arrowRight}</button></div><div class="rail-foot">${TC.icons.shieldCheck}<span>Evidence stays linked to the words.</span></div></aside>`;
 root.insertAdjacentHTML('afterbegin', `<style>${TC.CSS}</style>`);
 document.documentElement.append(root);
 const $ = s => root.querySelector(s); const panel = $('#tc-panel');
@@ -46,12 +53,14 @@ const $ = s => root.querySelector(s); const panel = $('#tc-panel');
 if (!TC_CONFIG.showCaptionOverlay) $('#tc-caption-overlay').style.display = 'none';
 $('.tc-close').onclick = () => panel.classList.remove('open');
 $('#tc-analyze').onclick = analyze;
+$('#tc-prev').onclick = () => { railIndex = Math.max(0, railIndex - 1); renderRail(); };
+$('#tc-next').onclick = () => { railIndex = Math.min(railClaims.length - 1, railIndex + 1); renderRail(); };
 // Panel is opened/closed from the toolbar icon (see background.js) rather
 // than an in-page button.
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'tc-toggle-panel') panel.classList.toggle('open');
 });
-makeDraggable(panel, panel.querySelector('header'));
+makeDraggable(panel, panel.querySelector('.rail-head'));
 makeDraggable($('#tc-caption-overlay'), $('#tc-caption-overlay').querySelector('b'));
 makeDraggable($('#tc-live-overlay'), $('#tc-live-overlay').querySelector('b'));
 document.addEventListener('yt-navigate-finish', checkForVideoChange);
@@ -98,6 +107,7 @@ function checkForVideoChange() {
   liveNotice = null;
   onCaptionText('');
   renderLiveChecks();
+  railClaims = []; railIndex = 0;
   renderEmpty(id ? 'New video detected. Ready to analyze.' : 'Open a YouTube video to analyze it.');
 }
 
@@ -203,20 +213,14 @@ function renderLiveChecks() {
     list.innerHTML = notice || '<p class="tc-live-empty">Watching for statements to check…</p>';
     return;
   }
-  list.innerHTML = notice + liveChecks.map(liveCard).join('');
-  list.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
-    if (event.target.closest('a')) return;
-    el.classList.toggle('expanded');
-  }));
+  list.innerHTML = notice + liveChecks.map(TC.card).join('');
+  list.querySelectorAll('.tc-jump').forEach(a => a.addEventListener('click', () => jumpTo(Number(a.dataset.time))));
 }
-function liveCard(item) {
-  const status = item.verdict === 'unsure' ? 'uncertain' : item.verdict;
-  const icon = status === 'true' ? '✓' : status === 'false' ? '×' : '!';
-  return `<article class="tc-card ${status}"><div class="tc-verdict"><span>${icon}</span>${item.verdict?.toUpperCase()}</div><h3>${TC.escapeHtml(item.header)}</h3><p>${TC.escapeHtml(item.explanation)}</p><div class="tc-detail">${item.confidence != null ? `<div class="tc-meta">${Math.round(item.confidence * 100)}% confidence</div>` : ''}<b>Statement</b><p class="tc-quote">${TC.escapeHtml(item.statement)}</p><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${TC.escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`;
-}
-function renderEmpty(message) { $('#tc-results').innerHTML = TC.emptyHtml(message); }
-function renderError(result) { $('#tc-results').innerHTML = TC.errorHtml(result); }
-function renderLoading() { $('#tc-results').innerHTML = TC.loadingHtml(); }
+function jumpTo(time) { const player = document.querySelector('video'); if (Number.isFinite(time) && player) player.currentTime = time; }
+function hideRailControls() { $('#tc-rail-controls').hidden = true; railClaims = []; railIndex = 0; }
+function renderEmpty(message) { hideRailControls(); $('#tc-results').innerHTML = TC.emptyHtml(message); }
+function renderError(result) { hideRailControls(); $('#tc-results').innerHTML = TC.errorHtml(result); }
+function renderLoading() { hideRailControls(); $('#tc-results').innerHTML = TC.loadingHtml(); }
 async function analyze() {
   if (!videoId()) { renderEmpty('Open a YouTube watch page to analyze a video.'); return; }
   renderLoading(); $('#tc-analyze').disabled = true;
@@ -242,7 +246,7 @@ function renderClaims(claims, demo, message, remaining) {
     return;
   }
   liveAnalysis = null;
-  renderCards(claims, demo, undefined, remaining);
+  showRail(claims, demo, remaining, false);
 }
 function updateLiveClaims(initial = false) {
   if (!liveAnalysis) return;
@@ -258,18 +262,37 @@ function updateLiveClaims(initial = false) {
   if (!newlyDue.length && liveAnalysis.revealed.length) return;
   liveAnalysis.revealed.push(...newlyDue);
   if (!liveAnalysis.revealed.length) {
+    hideRailControls();
     $('#tc-results').innerHTML = `<div class="tc-live-status"><span></span>Watching for verified claims…<small>Results appear at their timestamp. Pause the video to pause reveals.</small></div>`;
     return;
   }
-  renderCards(liveAnalysis.revealed, liveAnalysis.demo, `${liveAnalysis.claims.length} tracked`, liveAnalysis.remaining);
+  // Jump to the newest reveal so the rail always surfaces what just aired;
+  // the viewer can still step back with prev/dots to earlier claims.
+  showRail(liveAnalysis.revealed, liveAnalysis.demo, liveAnalysis.remaining, true);
 }
-function renderCards(claims, demo, meta = `${claims.length} claims`, remaining = null) {
-  $('#tc-results').innerHTML = `${demo ? '<div class="tc-demo">Demo results</div>' : ''}<h2>Analysis <em>${meta}</em></h2>${TC.remainingHtml(remaining)}${claims.map(item => TC.card(item)).join('')}`;
-  root.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
-    if (event.target.closest('a')) return;
-    el.classList.toggle('expanded');
-    const time = Number(el.dataset.time);
-    const player = document.querySelector('video');
-    if (Number.isFinite(time) && player && el.classList.contains('expanded')) player.currentTime = time;
-  }));
+// Populates the single-claim evidence rail (#tc-results + #tc-rail-controls)
+// and renders it. `jumpToNewest` is used by the live-reveal path so a newly
+// surfaced claim is what the viewer sees.
+function showRail(claims, demo, remaining, jumpToNewest) {
+  railClaims = claims;
+  railDemo = demo;
+  railRemaining = remaining;
+  railIndex = jumpToNewest ? claims.length - 1 : Math.min(railIndex, claims.length - 1);
+  renderRail();
+}
+function railStatus(item) { const s = (item.verdict || 'uncertain').toLowerCase(); return s === 'unsure' ? 'uncertain' : s; }
+function renderRail() {
+  const n = railClaims.length;
+  const railControls = $('#tc-rail-controls');
+  if (!n) { railControls.hidden = true; return; }
+  const item = railClaims[railIndex];
+  const dots = railClaims.map((c, i) => `<button class="progress-${railStatus(c)}${i === railIndex ? ' is-active' : ''}" data-i="${i}" aria-label="View ${railStatus(c)} claim" aria-current="${i === railIndex}"></button>`).join('');
+  const time = Number.isFinite(item.timestamp) ? `<a class="tc-jump" data-time="${item.timestamp}">Jump to ${Math.floor(item.timestamp / 60)}:${String(Math.floor(item.timestamp % 60)).padStart(2, '0')}</a>` : '';
+  $('#tc-results').innerHTML = `${railDemo ? '<div class="tc-demo">Demo results</div>' : ''}<div class="rail-progress"><span>Claim ${railIndex + 1} of ${n}</span><div style="--tc-claim-count:${n}">${dots}</div></div>${TC.verdictHtml(item, time)}${TC.remainingHtml(railRemaining)}`;
+  $('#tc-results .tc-jump')?.addEventListener('click', () => jumpTo(item.timestamp));
+  $('#tc-results').querySelectorAll('.rail-progress button').forEach(b => b.addEventListener('click', () => { railIndex = Number(b.dataset.i); renderRail(); }));
+  railControls.hidden = false;
+  $('#tc-rail-count').textContent = `${railIndex + 1} / ${n}`;
+  $('#tc-prev').disabled = railIndex === 0;
+  $('#tc-next').disabled = railIndex === n - 1;
 }

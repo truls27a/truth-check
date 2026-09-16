@@ -6,20 +6,25 @@
 globalThis.__tcSelection || (globalThis.__tcSelection = createTruthCheckSelectionCard());
 
 function createTruthCheckSelectionCard() {
-  const CARD_WIDTH = 340;
+  const CARD_WIDTH = 360;
   const GAP = 8;
-  const SELECTION_CSS = `:host{all:initial;display:block!important}
-    .tc-selection{position:relative;background:#11131a;border:1px solid #303646;border-radius:14px;box-shadow:0 18px 50px #0009;padding:12px 12px 4px;font:14px/1.4 Inter,ui-sans-serif,system-ui,sans-serif;box-sizing:border-box}
+  // Same palette as styles.css (#truthcheck-root) — repeated here because a
+  // shadow root doesn't inherit custom properties from outside its host.
+  const SELECTION_CSS = `:host{all:initial;display:block!important;
+    --background:oklch(100% 0 0);--foreground:oklch(14.5% 0 0);--muted:oklch(94.5% 0 0);--muted-foreground:oklch(42% 0 0);
+    --border:oklch(89% 0 0);--accent:oklch(92.5% .205 112);--signal:oklch(92.5% .205 112);
+    --true:oklch(48% .13 152);--false:oklch(58% .2 29);--uncertain:oklch(63% .14 75)}
+    .tc-selection{position:relative;background:var(--background);border:1px solid var(--border);border-radius:.6rem;box-shadow:0 18px 50px rgba(0,0,0,.18);padding:12px 12px 4px;font:14px/1.4 Manrope,ui-sans-serif,system-ui,sans-serif;box-sizing:border-box}
     .tc-selection *{box-sizing:border-box}
     .tc-selection .tc-close{position:absolute;top:6px;right:10px;z-index:1}
-    .tc-selection .tc-card{cursor:pointer;margin:0 0 9px}
+    .tc-selection .tc-card{margin:0 0 9px}
     .tc-selection .tc-loading{padding:28px 0}
     .tc-selection .tc-empty{padding:26px 10px}`;
 
   const host = document.createElement('div');
   host.id = 'truthcheck-selection-host';
   const shadow = host.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `<style>${TC.CSS}${SELECTION_CSS}</style><div class="tc-ui tc-selection"><button class="tc-close" aria-label="Close">×</button><div class="tc-body"></div></div>`;
+  shadow.innerHTML = `<style>${TC.CSS}${SELECTION_CSS}</style><div class="tc-ui tc-selection"><button class="tc-close" aria-label="Close">${TC.icons.close}</button><div class="tc-body"></div></div>`;
   document.documentElement.append(host);
 
   const body = shadow.querySelector('.tc-body');
@@ -65,10 +70,6 @@ function createTruthCheckSelectionCard() {
     } else if (!message.claims?.length) body.innerHTML = TC.emptyHtml(TC.escapeHtml(message.message || 'No fact-checkable statements found.'));
     else {
       body.innerHTML = `${message.demo ? '<div class="tc-demo">Demo result</div>' : ''}${TC.card(message.claims[0])}${TC.remainingHtml(message.remaining)}`;
-      shadow.querySelector('.tc-card').addEventListener('click', event => {
-        if (event.target.closest('a')) return;
-        event.currentTarget.classList.toggle('expanded');
-      });
     }
     position();
   }
