@@ -3,7 +3,16 @@
 // chrome://extensions, then fully close and reopen the YouTube tab (not
 // just Cmd+Shift+R) before testing again.
 console.log('[TruthCheck] content.js build: dom-scrape-verified-selectors');
-const API = 'http://localhost:8787';
+// Backend calls are proxied through the background service worker (see
+// background.js's tc-fetch handler), not fetched directly from here: a
+// content script on a public https:// page fetching http://localhost is a
+// public->local request subject to Private Network Access preflight, which
+// this project's plain-http backend doesn't answer, so a direct fetch is
+// silently blocked. An extension-origin fetch backed by host_permissions
+// sidesteps that (same reasoning already applied to the selection feature).
+function backendFetch(path, body) {
+  return chrome.runtime.sendMessage({ type: 'tc-fetch', path, body });
+}
 const focuses = [
   ['general', 'General factual claims'], ['politics', 'Politics & current events'], ['science', 'Science & health'], ['economics', 'Economics'], ['history', 'History'], ['technology', 'Technology'], ['numbers', 'Numbers & statistics'], ['all', 'All relevant claims']
 ];
@@ -27,6 +36,9 @@ root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-c
 root.insertAdjacentHTML('afterbegin', `<style>${TC.CSS}</style>`);
 document.documentElement.append(root);
 const $ = s => root.querySelector(s); const panel = $('#tc-panel');
+// The caption pipeline (captionBuffer, the live fact-checker) keeps running
+// regardless of this setting — it only hides the readout box itself.
+if (!TC_CONFIG.showCaptionOverlay) $('#tc-caption-overlay').style.display = 'none';
 $('.tc-close').onclick = () => panel.classList.remove('open');
 $('#tc-analyze').onclick = analyze;
 // Panel is opened/closed from the toolbar icon (see background.js) rather
@@ -153,8 +165,7 @@ async function pollLiveCheck() {
   lastCheckedBufferLength = captionBuffer.length;
   liveCheckInFlight = true;
   try {
-    const response = await fetch(`${API}/api/live-check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recentText, focus: $('#tc-focus').value }) });
-    const data = await response.json();
+    const data = await backendFetch('/api/live-check', { recentText, focus: $('#tc-focus').value });
     if (data.hasStatement) {
       liveChecks.unshift(data);
       if (liveChecks.length > 20) liveChecks.length = 20;
@@ -192,8 +203,8 @@ async function analyze() {
   if (!videoId()) { renderEmpty('Open a YouTube watch page to analyze a video.'); return; }
   renderLoading(); $('#tc-analyze').disabled = true;
   try {
-    const response = await fetch(`${API}/api/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId: videoId(), focus: $('#tc-focus').value }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error);
+    const data = await backendFetch('/api/analyze', { videoId: videoId(), focus: $('#tc-focus').value });
+    if (data.error) throw new Error(data.error);
     renderClaims(data.claims, data.demo, data.message);
   } catch (error) { renderEmpty(`${error.message || 'Verification service unavailable.'}<br><button class="tc-paste">Paste transcript instead</button>`); $('.tc-paste')?.addEventListener('click', promptTranscript); }
   finally { $('#tc-analyze').disabled = false; }
@@ -201,7 +212,7 @@ async function analyze() {
 async function promptTranscript() {
   const transcript = prompt('Paste the video transcript:'); if (!transcript?.trim()) return;
   renderLoading();
-  try { const r = await fetch(`${API}/api/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, focus: $('#tc-focus').value }) }); const d = await r.json(); if (!r.ok) throw new Error(d.error); renderClaims(d.claims, d.demo, d.message); } catch (e) { renderEmpty(e.message); }
+  try { const d = await backendFetch('/api/analyze', { transcript, focus: $('#tc-focus').value }); if (d.error) throw new Error(d.error); renderClaims(d.claims, d.demo, d.message); } catch (e) { renderEmpty(e.message); }
 }
 function renderClaims(claims, demo, message) {
   if (!claims?.length) return renderEmpty(message || 'No fact-checkable statements found.');

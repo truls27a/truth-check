@@ -30,6 +30,16 @@ chrome.runtime.onInstalled.addListener(() => {
   }));
 });
 
+// The YouTube panel (content.js) needs the same background-mediated fetch
+// as the selection card, for the same Private Network Access reason — it
+// asks for it via this generic proxy instead of duplicating checkText's
+// fetch/timeout/error handling for every endpoint it calls.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== 'tc-fetch') return undefined;
+  fetchJson(message.path, message.body).then(sendResponse);
+  return true; // keep the message channel open for the async response
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab?.id) return;
   // activeTab is granted by this click, which is what lets us inject anywhere
@@ -60,13 +70,17 @@ function sendToFrame(tabId, frameId, message) {
   return chrome.tabs.sendMessage(tabId, message, { frameId }).catch(() => null);
 }
 
-async function checkText(text) {
+function checkText(text) {
+  return fetchJson('/api/check-text', { text });
+}
+
+async function fetchJson(path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(`${API}/api/check-text`, {
+    const response = await fetch(`${API}${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }), signal: controller.signal
+      body: JSON.stringify(body), signal: controller.signal
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);

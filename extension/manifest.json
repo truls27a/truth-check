@@ -7,5 +7,5 @@
   "host_permissions": ["http://localhost:8787/*"],
   "action": { "default_title": "TruthCheck — click to open the panel" },
   "background": { "service_worker": "background.js" },
-  "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["card.js", "content.js"], "css": ["styles.css", "live.css"], "run_at": "document_idle" }]
+  "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["config.js", "card.js", "content.js"], "css": ["styles.css", "live.css"], "run_at": "document_idle" }]
 }
