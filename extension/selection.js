@@ -23,7 +23,7 @@ function createTruthCheckSelectionCard() {
   document.documentElement.append(host);
 
   const body = shadow.querySelector('.tc-body');
-  const state = { token: null, rect: null };
+  const state = { token: null, rect: null, text: '', retry: null };
   hide();
 
   shadow.querySelector('.tc-close').addEventListener('click', hide);
@@ -48,7 +48,9 @@ function createTruthCheckSelectionCard() {
       const active = document.activeElement;
       rect = active && /^(INPUT|TEXTAREA)$/.test(active.tagName) ? active.getBoundingClientRect() : null;
     }
+    clearTimeout(state.retry);
     state.token = message.token;
+    state.text = text;
     state.rect = rect && (rect.width || rect.height) ? { top: rect.top, bottom: rect.bottom, left: rect.left } : null;
     body.innerHTML = TC.loadingHtml();
     show();
@@ -57,16 +59,33 @@ function createTruthCheckSelectionCard() {
   }
 
   function showResult(message) {
-    if (message.error) body.innerHTML = TC.emptyHtml(message.error);
-    else if (!message.claims?.length) body.innerHTML = TC.emptyHtml(message.message || 'No fact-checkable statements found.');
+    if (message.error) {
+      body.innerHTML = TC.errorHtml(message);
+      if (message.code === 'rate') scheduleRetry(message.token, message.retryAfterMs);
+    } else if (!message.claims?.length) body.innerHTML = TC.emptyHtml(TC.escapeHtml(message.message || 'No fact-checkable statements found.'));
     else {
-      body.innerHTML = `${message.demo ? '<div class="tc-demo">Demo result</div>' : ''}${TC.card(message.claims[0])}`;
+      body.innerHTML = `${message.demo ? '<div class="tc-demo">Demo result</div>' : ''}${TC.card(message.claims[0])}${TC.remainingHtml(message.remaining)}`;
       shadow.querySelector('.tc-card').addEventListener('click', event => {
         if (event.target.closest('a')) return;
         event.currentTarget.classList.toggle('expanded');
       });
     }
     position();
+  }
+
+  // Rate-limited: retry once after the back-off, unless the card was closed
+  // or reused for another selection in the meantime.
+  function scheduleRetry(token, delayMs) {
+    clearTimeout(state.retry);
+    state.retry = setTimeout(async () => {
+      if (token !== state.token) return;
+      body.innerHTML = TC.loadingHtml();
+      position();
+      const result = await chrome.runtime.sendMessage({ type: 'tc-fetch', path: '/api/public/check-text', body: { text: state.text }, interactive: true })
+        .catch(() => ({ error: 'Verification is unavailable right now. Try again shortly.' }));
+      if (token !== state.token) return;
+      showResult({ ...result, code: result.code === 'rate' ? 'rate-final' : result.code, token });
+    }, delayMs);
   }
 
   function position() {
@@ -97,7 +116,7 @@ function createTruthCheckSelectionCard() {
   }
 
   function show() { host.style.setProperty('display', 'block', 'important'); }
-  function hide() { host.style.setProperty('display', 'none', 'important'); state.token = null; }
+  function hide() { host.style.setProperty('display', 'none', 'important'); state.token = null; clearTimeout(state.retry); }
 
   return { open, hide };
 }

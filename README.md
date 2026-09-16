@@ -21,21 +21,29 @@ Claims move faster than fact-checking does. A video makes a statement, you keep 
 caption / selected text  →  extract fact-checkable claims  →  web search for evidence  →  verdict + sources
 ```
 
-A small local backend handles extraction and verification (OpenAI's Responses API with built-in web search). The extension never talks to an LLM directly, and no API key ever touches the browser.
+Extraction and verification run on the [TruthCheck website](https://truth-check-tool.lovable.app), behind your TruthCheck account. The extension never talks to an LLM directly and holds no API keys: it only sends your sign-in token, and only to TruthCheck.
 
-## Run it
+## Install
 
-Prerequisite: Node.js 18+. No npm packages required.
+1. **Clone** this repo: `git clone https://github.com/truthcheck/truthcheck.git`
+2. Open **`chrome://extensions`**, turn on **Developer mode**, click **Load unpacked**, and select the `extension` folder.
+3. Click the TruthCheck icon in the toolbar and **sign in** with your TruthCheck account. Your plan (Free or Pro) carries over automatically.
+
+Then open a YouTube video with captions on, or highlight text on any page and right-click **Fact-check with TruthCheck**. On YouTube, open the full panel from the toolbar popup.
+
+No account yet? [Create one on the website](https://truth-check-tool.lovable.app).
+
+## Plans
+
+- **Free** — 10 checks a day (selected text and video analysis), plus 40 live-caption checks a day.
+- **Pro** — unlimited checks, documents and PDFs, deeper evidence, and full history. [See pricing](https://truth-check-tool.lovable.app/pricing).
+
+Limits are enforced by the website. When the free allowance runs out, TruthCheck says so in the card and links to Pro.
+
+## Development
+
+There is no build step. The extension is plain JavaScript loaded directly by `extension/manifest.json`; after editing, reload it in `chrome://extensions`. Website and Supabase settings live in `extension/config.js`.
 
 ```bash
-cp .env.example .env
-npm run dev
+npm test   # Node 18+; no dependencies
 ```
-
-Then load the extension:
-
-1. Open `chrome://extensions` and enable **Developer mode**.
-2. **Load unpacked** → select the `extension` folder.
-3. Open a YouTube video with captions on, or highlight text on any page and right-click **Fact-check with TruthCheck**.
-
-It ships in **demo mode**: verdicts appear instantly with no API key, so a live demo never depends on a third-party API. Set `DEMO_MODE=false` and add `LLM_API_KEY` in `.env` for live analysis.

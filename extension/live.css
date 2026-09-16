@@ -32,7 +32,9 @@
 }
 /* Second floating window: the live fact-check feed. Positioned on the
    opposite (left) side from the caption box and panel so the two don't
-   default-overlap; both are draggable if the user wants to rearrange them. */
+   default-overlap; both are draggable if the user wants to rearrange them.
+   Hidden until there is a check or notice to show — nothing appears on load. */
+#tc-live-overlay:not(.has-content) { display: none; }
 #tc-live-overlay {
   position: fixed;
   top: 64px;
