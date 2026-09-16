@@ -223,22 +223,22 @@ test('Google sign-in starts at the website OAuth broker and returns to the websi
   const url = new URL(auth.googleSignInUrl('state-1'));
   assert.equal(`${url.origin}${url.pathname}`, 'https://truth-check-tool.lovable.app/~oauth/initiate');
   assert.equal(url.searchParams.get('provider'), 'google');
-  assert.equal(url.searchParams.get('redirect_uri'), 'https://truth-check-tool.lovable.app/');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://truth-check-tool.lovable.app/extension-auth');
   assert.equal(url.searchParams.get('state'), 'state-1');
 });
 
 test('reads Google tokens from the broker redirect only when the state matches', () => {
   const { auth } = setup({});
-  const base = TC_CONFIG.apiBase;
-  assert.equal(auth.parseOAuthRedirect(`${base}/~oauth/initiate?provider=google&state=s1`, 's1'), null, 'the outgoing request is not a redirect');
-  assert.equal(auth.parseOAuthRedirect(`${base}/pricing`, 's1'), null);
+  const base = `${TC_CONFIG.apiBase}/extension-auth`;
+  assert.equal(auth.parseOAuthRedirect(`${TC_CONFIG.apiBase}/~oauth/initiate?provider=google&state=s1`, 's1'), null, 'the outgoing request is not a redirect');
+  assert.equal(auth.parseOAuthRedirect(`${TC_CONFIG.apiBase}/#access_token=a&refresh_token=r&state=s1`, 's1'), null, 'only the extension callback path counts');
   assert.equal(auth.parseOAuthRedirect(`https://evil.example/#access_token=a&refresh_token=r&state=s1`, 's1'), null);
-  const fromHash = auth.parseOAuthRedirect(`${base}/#access_token=a&refresh_token=r&expires_in=3600&state=s1`, 's1');
+  const fromHash = auth.parseOAuthRedirect(`${base}#access_token=a&refresh_token=r&expires_in=3600&state=s1`, 's1');
   assert.deepEqual({ ...fromHash.tokens }, { access_token: 'a', refresh_token: 'r', expires_in: 3600, expires_at: null });
-  assert.equal(auth.parseOAuthRedirect(`${base}/?access_token=a&refresh_token=r&state=s1`, 's1').tokens.refresh_token, 'r');
-  assert.match(auth.parseOAuthRedirect(`${base}/#access_token=a&refresh_token=r&state=other`, 's1').error, /could not be verified/);
-  assert.equal(auth.parseOAuthRedirect(`${base}/?error=access_denied&error_description=User%20cancelled&state=s1`, 's1').error, 'User cancelled');
-  assert.match(auth.parseOAuthRedirect(`${base}/#access_token=a&state=s1`, 's1').error, /failed/);
+  assert.equal(auth.parseOAuthRedirect(`${base}?access_token=a&refresh_token=r&state=s1`, 's1').tokens.refresh_token, 'r');
+  assert.match(auth.parseOAuthRedirect(`${base}#access_token=a&refresh_token=r&state=other`, 's1').error, /could not be verified/);
+  assert.equal(auth.parseOAuthRedirect(`${base}?error=access_denied&error_description=User%20cancelled&state=s1`, 's1').error, 'User cancelled');
+  assert.match(auth.parseOAuthRedirect(`${base}#access_token=a&state=s1`, 's1').error, /failed/);
 });
 
 test('Google tokens are verified with Supabase and stored with the JWT expiry', async () => {

@@ -12,6 +12,7 @@ globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storag
   const ENTITLEMENT_KEY = 'tc.entitlement';
   const ENTITLEMENT_TTL_MS = 5 * 60 * 1000;
   const EXPIRY_MARGIN_S = 60;
+  const OAUTH_REDIRECT_PATH = '/extension-auth';
   let refreshing = null;
 
   async function read(key) { return (await storage.get(key))[key] ?? null; }
@@ -50,9 +51,11 @@ globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storag
   // Google sign-in goes through Lovable Cloud's OAuth broker (the Supabase
   // project has no Google secret of its own). The broker only redirects back
   // to the website's own origin, so the worker opens this URL in a tab and
-  // reads the tokens off the redirect (see parseOAuthRedirect).
+  // reads the tokens off the redirect (see parseOAuthRedirect). The website
+  // must not adopt tokens on /extension-auth: if it stored and later rotated
+  // them, Supabase's reuse detection could sign the extension out.
   function googleSignInUrl(state) {
-    const params = new URLSearchParams({ provider: 'google', redirect_uri: `${config.apiBase}/`, state });
+    const params = new URLSearchParams({ provider: 'google', redirect_uri: `${config.apiBase}${OAUTH_REDIRECT_PATH}`, state });
     return `${config.apiBase}/~oauth/initiate?${params}`;
   }
 
@@ -60,7 +63,7 @@ globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storag
   function parseOAuthRedirect(url, expectedState) {
     let parsed;
     try { parsed = new URL(url); } catch { return null; }
-    if (parsed.origin !== new URL(config.apiBase).origin) return null;
+    if (parsed.origin !== new URL(config.apiBase).origin || parsed.pathname !== OAUTH_REDIRECT_PATH) return null;
     const params = new URLSearchParams(parsed.hash.slice(1));
     for (const [key, value] of parsed.searchParams) if (!params.has(key)) params.set(key, value);
     if (!params.has('state') || !(params.has('access_token') || params.has('error'))) return null;
