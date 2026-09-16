@@ -1,3 +1,32 @@
+/* Always-visible readout of the caption text the extension currently sees —
+   independent of the collapsible panel, so it's obvious without opening it. */
+#tc-caption-overlay {
+  position: fixed;
+  top: 64px;
+  right: 18px;
+  z-index: 2147483647;
+  max-width: 300px;
+  background: rgba(17, 19, 26, 0.92);
+  border: 1px solid #343a4b;
+  border-radius: 10px;
+  padding: 9px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+#tc-caption-overlay b {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+#tc-caption-overlay p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+}
 .tc-live {
   display: flex !important;
   align-items: center;

@@ -3,5 +3,7 @@
   "name": "TruthCheck",
   "version": "0.1.0",
   "description": "Verify factual claims as you watch YouTube.",
+  "action": { "default_title": "TruthCheck — click to open the panel" },
+  "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["content.js"], "css": ["styles.css", "live.css"], "run_at": "document_idle" }]
 }
