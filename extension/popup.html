@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TruthCheck</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="20" height="20">
+    <strong>TruthCheck</strong>
+    <span id="plan" class="badge" hidden></span>
+  </header>
+
+  <p id="update" class="notice" hidden></p>
+
+  <section id="loading"><p class="muted">Loading…</p></section>
+
+  <form id="signed-out" hidden>
+    <p class="muted">Sign in with your TruthCheck account to fact-check.</p>
+    <button id="google" type="button" class="secondary">Continue with Google</button>
+    <p class="divider muted small">or use email</p>
+    <label>Email<input id="email" type="email" autocomplete="username" required></label>
+    <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+    <p id="error" class="error" role="alert" hidden></p>
+    <button id="sign-in" type="submit">Sign in</button>
+    <p class="muted small">No account yet? <a id="signup" target="_blank" rel="noopener">Create one on the website</a></p>
+  </form>
+
+  <section id="signed-in" hidden>
+    <p>Signed in as <b id="who"></b></p>
+    <p id="stale" class="muted small" hidden>Couldn’t reach TruthCheck to confirm your plan.</p>
+    <p id="upsell" class="muted small" hidden>Free plan: 10 checks and 40 live-caption checks a day. <a id="pricing" target="_blank" rel="noopener">See Pro</a></p>
+    <button id="panel" type="button" class="secondary" hidden>Show fact-check panel</button>
+    <button id="sign-out" type="button" class="secondary">Sign out</button>
+  </section>
+
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

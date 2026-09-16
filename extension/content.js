@@ -3,16 +3,17 @@
 // chrome://extensions, then fully close and reopen the YouTube tab (not
 // just Cmd+Shift+R) before testing again.
 console.log('[TruthCheck] content.js build: dom-scrape-verified-selectors');
-// Backend calls are proxied through the background service worker (see
-// background.js's tc-fetch handler), not fetched directly from here: a
-// content script on a public https:// page fetching http://localhost is a
-// public->local request subject to Private Network Access preflight, which
-// this project's plain-http backend doesn't answer, so a direct fetch is
-// silently blocked. An extension-origin fetch backed by host_permissions
-// sidesteps that (same reasoning already applied to the selection feature).
-function backendFetch(path, body) {
-  return chrome.runtime.sendMessage({ type: 'tc-fetch', path, body });
+// Website calls are proxied through the background service worker (see
+// background.js's tc-fetch handler), which holds the user's session and
+// attaches the access token — the token never enters this page. Resolves to
+// the response data or { error, code }.
+function backendFetch(path, body, interactive = false) {
+  return chrome.runtime.sendMessage({ type: 'tc-fetch', path, body, interactive })
+    .catch(() => ({ code: 'unavailable', error: 'TruthCheck was reloaded. Refresh this page to keep checking.' }));
 }
+// Conservative so a Free user's daily live allowance lasts through a video.
+const LIVE_CHECK_INTERVAL_MS = 15000;
+const MAX_LIVE_TEXT_CHARS = 1500;
 const focuses = [
   ['general', 'General factual claims'], ['politics', 'Politics & current events'], ['science', 'Science & health'], ['economics', 'Economics'], ['history', 'History'], ['technology', 'Technology'], ['numbers', 'Numbers & statistics'], ['all', 'All relevant claims']
 ];
@@ -31,6 +32,10 @@ const CAPTION_SEGMENT_SELECTOR = '.ytp-caption-segment';
 let liveChecks = [];
 let lastCheckedBufferLength = 0;
 let liveCheckInFlight = false;
+// { error, code } from the last failed live check, shown in the live overlay.
+let liveNotice = null;
+let liveBackoffUntil = 0;
+let liveAllowanceUsed = false;
 const root = document.createElement('div'); root.id = 'truthcheck-root';
 root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results" class="tc-ui"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
 root.insertAdjacentHTML('afterbegin', `<style>${TC.CSS}</style>`);
@@ -54,7 +59,7 @@ document.addEventListener('yt-navigate-finish', checkForVideoChange);
 // where its custom event is missed by a content script.
 setInterval(checkForVideoChange, 500);
 setInterval(updateLiveClaims, 500);
-setInterval(pollLiveCheck, 8000);
+setInterval(pollLiveCheck, LIVE_CHECK_INTERVAL_MS);
 watchCaptions(onCaptionText);
 
 // Lets the user reposition the floating panel by dragging its header.
@@ -90,6 +95,7 @@ function checkForVideoChange() {
   captionBuffer = [];
   liveChecks = [];
   lastCheckedBufferLength = 0;
+  liveNotice = null;
   onCaptionText('');
   renderLiveChecks();
   renderEmpty(id ? 'New video detected. Ready to analyze.' : 'Open a YouTube video to analyze it.');
@@ -151,42 +157,53 @@ function onCaptionText(text) {
   if (captionBuffer.length > 200) captionBuffer.shift();
 }
 
-// Sends newly-seen caption text (since the last successful check) to the
-// backend's live fact-checking agent (server/services/liveCheck.js). Runs
-// continuously in the background, independent of the panel — results show
-// up in the always-visible #tc-live-overlay window, not the panel.
+// Sends newly-seen caption text (since the last check) to the website's live
+// fact-checking endpoint. Runs in the background, independent of the panel —
+// results show up in the #tc-live-overlay window, which stays hidden until
+// there is something to show.
 async function pollLiveCheck() {
-  if (liveCheckInFlight) return;
+  if (liveCheckInFlight || liveAllowanceUsed || Date.now() < liveBackoffUntil) return;
   const player = document.querySelector('video');
   if (!videoId() || player?.paused) return; // mirrors "pausing pauses reveals" elsewhere in this file
   const newEntries = captionBuffer.slice(lastCheckedBufferLength);
-  const recentText = newEntries.map(e => e.text).join(' ').trim();
+  const recentText = newEntries.map(e => e.text).join(' ').trim().slice(-MAX_LIVE_TEXT_CHARS);
   if (recentText.length < 20) return; // not enough new speech yet to be worth a check
   lastCheckedBufferLength = captionBuffer.length;
   liveCheckInFlight = true;
   try {
-    const data = await backendFetch('/api/live-check', { recentText, focus: $('#tc-focus').value });
+    const data = await backendFetch('/api/public/live-check', { recentText, focus: $('#tc-focus').value });
+    if (data.error) return onLiveError(data);
+    const hadNotice = Boolean(liveNotice);
+    liveNotice = null;
     if (data.hasStatement) {
       liveChecks.unshift(data);
       if (liveChecks.length > 20) liveChecks.length = 20;
-      renderLiveChecks();
     }
-  } catch (err) {
-    console.warn('[TruthCheck] live check failed:', err);
+    if (data.hasStatement || hadNotice) renderLiveChecks();
   } finally {
     liveCheckInFlight = false;
   }
+}
+// Signed out: keep polling (the worker answers without a network call) so
+// checks resume after sign-in. Allowance used up: stop for this page.
+function onLiveError(data) {
+  if (data.code === 'limit') { liveAllowanceUsed = true; data = { ...data, error: 'Today’s free live checks are used up.' }; }
+  if (data.code === 'rate' || data.code === 'unavailable') liveBackoffUntil = Date.now() + (data.retryAfterMs || 30000);
+  liveNotice = data;
+  renderLiveChecks();
 }
 function renderLiveChecks() {
   const list = $('#tc-live-list');
   const count = $('#tc-live-count');
   if (!list) return;
+  $('#tc-live-overlay').classList.toggle('has-content', Boolean(liveChecks.length || liveNotice));
   if (count) count.textContent = liveChecks.length ? ` (${liveChecks.length})` : '';
+  const notice = liveNotice ? TC.errorHtml(liveNotice) : '';
   if (!liveChecks.length) {
-    list.innerHTML = '<p class="tc-live-empty">Watching for statements to check…</p>';
+    list.innerHTML = notice || '<p class="tc-live-empty">Watching for statements to check…</p>';
     return;
   }
-  list.innerHTML = liveChecks.map(liveCard).join('');
+  list.innerHTML = notice + liveChecks.map(liveCard).join('');
   list.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
     if (event.target.closest('a')) return;
     el.classList.toggle('expanded');
@@ -198,31 +215,34 @@ function liveCard(item) {
   return `<article class="tc-card ${status}"><div class="tc-verdict"><span>${icon}</span>${item.verdict?.toUpperCase()}</div><h3>${TC.escapeHtml(item.header)}</h3><p>${TC.escapeHtml(item.explanation)}</p><div class="tc-detail">${item.confidence != null ? `<div class="tc-meta">${Math.round(item.confidence * 100)}% confidence</div>` : ''}<b>Statement</b><p class="tc-quote">${TC.escapeHtml(item.statement)}</p><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${TC.escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`;
 }
 function renderEmpty(message) { $('#tc-results').innerHTML = TC.emptyHtml(message); }
+function renderError(result) { $('#tc-results').innerHTML = TC.errorHtml(result); }
 function renderLoading() { $('#tc-results').innerHTML = TC.loadingHtml(); }
 async function analyze() {
   if (!videoId()) { renderEmpty('Open a YouTube watch page to analyze a video.'); return; }
   renderLoading(); $('#tc-analyze').disabled = true;
   try {
-    const data = await backendFetch('/api/analyze', { videoId: videoId(), focus: $('#tc-focus').value });
-    if (data.error) throw new Error(data.error);
-    renderClaims(data.claims, data.demo, data.message);
-  } catch (error) { renderEmpty(`${error.message || 'Verification service unavailable.'}<br><button class="tc-paste">Paste transcript instead</button>`); $('.tc-paste')?.addEventListener('click', promptTranscript); }
-  finally { $('#tc-analyze').disabled = false; }
+    const data = await backendFetch('/api/public/analyze', { videoId: videoId(), focus: $('#tc-focus').value }, true);
+    // Only a transcript problem is worth offering the paste fallback for.
+    if (data.code === 'invalid') { renderEmpty(`${TC.escapeHtml(data.error)}<br><button class="tc-paste">Paste transcript instead</button>`); $('.tc-paste')?.addEventListener('click', promptTranscript); }
+    else if (data.error) renderError(data);
+    else renderClaims(data.claims, data.demo, data.message, data.remaining);
+  } finally { $('#tc-analyze').disabled = false; }
 }
 async function promptTranscript() {
   const transcript = prompt('Paste the video transcript:'); if (!transcript?.trim()) return;
   renderLoading();
-  try { const d = await backendFetch('/api/analyze', { transcript, focus: $('#tc-focus').value }); if (d.error) throw new Error(d.error); renderClaims(d.claims, d.demo, d.message); } catch (e) { renderEmpty(e.message); }
+  const d = await backendFetch('/api/public/analyze', { videoId: videoId(), transcript, focus: $('#tc-focus').value }, true);
+  if (d.error) renderError(d); else renderClaims(d.claims, d.demo, d.message, d.remaining);
 }
-function renderClaims(claims, demo, message) {
-  if (!claims?.length) return renderEmpty(message || 'No fact-checkable statements found.');
+function renderClaims(claims, demo, message, remaining) {
+  if (!claims?.length) return renderEmpty(TC.escapeHtml(message || 'No fact-checkable statements found.'));
   if ($('#tc-live').checked) {
-    liveAnalysis = { claims, demo, revealed: [] };
+    liveAnalysis = { claims, demo, remaining, revealed: [] };
     updateLiveClaims(true);
     return;
   }
   liveAnalysis = null;
-  renderCards(claims, demo);
+  renderCards(claims, demo, undefined, remaining);
 }
 function updateLiveClaims(initial = false) {
   if (!liveAnalysis) return;
@@ -241,10 +261,10 @@ function updateLiveClaims(initial = false) {
     $('#tc-results').innerHTML = `<div class="tc-live-status"><span></span>Watching for verified claims…<small>Results appear at their timestamp. Pause the video to pause reveals.</small></div>`;
     return;
   }
-  renderCards(liveAnalysis.revealed, liveAnalysis.demo, `${liveAnalysis.claims.length} tracked`);
+  renderCards(liveAnalysis.revealed, liveAnalysis.demo, `${liveAnalysis.claims.length} tracked`, liveAnalysis.remaining);
 }
-function renderCards(claims, demo, meta = `${claims.length} claims`) {
-  $('#tc-results').innerHTML = `${demo ? '<div class="tc-demo">Demo results</div>' : ''}<h2>Analysis <em>${meta}</em></h2>${claims.map(item => TC.card(item)).join('')}`;
+function renderCards(claims, demo, meta = `${claims.length} claims`, remaining = null) {
+  $('#tc-results').innerHTML = `${demo ? '<div class="tc-demo">Demo results</div>' : ''}<h2>Analysis <em>${meta}</em></h2>${TC.remainingHtml(remaining)}${claims.map(item => TC.card(item)).join('')}`;
   root.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
     if (event.target.closest('a')) return;
     el.classList.toggle('expanded');
