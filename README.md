@@ -1,56 +1,41 @@
 # TruthCheck
 
-TruthCheck is a Chrome Manifest V3 extension with a tiny local API that finds and verifies factual claims while you watch YouTube. It ships in reliable demo mode so a presentation does not depend on third-party APIs.
+**Read with receipts.**
 
-## Run it now
+TruthCheck is a Chrome extension that fact-checks claims as they happen — while you watch a YouTube video, or over any text you highlight on the web. No new tab, no separate search: it quietly checks what's being said and shows the evidence right where you're already looking.
 
-Prerequisite: Node.js 18+ (Node 20+ recommended). No npm packages are required.
+## The problem
+
+Claims move faster than fact-checking does. A video makes a statement, you keep watching, and by the time it'd occur to you to check it, ten more have gone by. The tools that do exist ask for the opposite of convenience: copy the claim, paste it somewhere, search it yourself, read through results, decide who to trust. That friction is exactly why most claims — true or false — never get checked at all.
+
+## What it does
+
+- **On YouTube** — a live caption feed updates as the video plays, and **Analyze video** returns up to five verified claims with a **TRUE / FALSE / UNCERTAIN** verdict, a short explanation, and sources. Click a result to seek the video to that moment.
+- **On any page** — highlight a sentence, right-click **Fact-check with TruthCheck**, and get the same verdict in a floating card. No tab-switching.
+- **Evidence before certainty** — every verdict is grounded in web search results, not the model's memory, and sources are always shown, never just asserted.
+- **Pick a focus** — general claims, politics, science & health, economics, history, technology, or numbers & statistics, to narrow what gets checked.
+
+## How it works
+
+```
+caption / selected text  →  extract fact-checkable claims  →  web search for evidence  →  verdict + sources
+```
+
+A small local backend handles extraction and verification (OpenAI's Responses API with built-in web search). The extension never talks to an LLM directly, and no API key ever touches the browser.
+
+## Run it
+
+Prerequisite: Node.js 18+. No npm packages required.
 
 ```bash
-cd truth-check
 cp .env.example .env
 npm run dev
 ```
 
-The API should say it is listening at `http://localhost:8787` and that demo mode is enabled (`demo mode: true`). Keep that terminal running. **No API key is needed for this step.**
-
 Then load the extension:
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Select **Load unpacked** and choose the `extension` folder in this repository.
-4. Open any `https://www.youtube.com/watch?v=...` page and turn on captions (**CC**) on the player.
-5. Open the TruthCheck panel (purple button, bottom right) — the **Live caption** box at the top updates in real time as the video plays, straight from YouTube's caption DOM. This needs no backend and no API key at all; it works even before the server is running.
-6. To also get verified claims: choose a focus and click **Analyze video**.
+1. Open `chrome://extensions` and enable **Developer mode**.
+2. **Load unpacked** → select the `extension` folder.
+3. Open a YouTube video with captions on, or highlight text on any page and right-click **Fact-check with TruthCheck**.
 
-In demo mode, **Analyze video** returns polished, timestamped TRUE/FALSE results immediately and consistently (not based on the actual video). Clicking a result expands its sources and seeks the video to its approximate timestamp.
-
-## Live mode
-
-Live mode uses one OpenAI API key. It uses the Responses API and OpenAI built-in web search for evidence:
-
-```dotenv
-DEMO_MODE=false
-LLM_API_KEY=your_key
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-5.6-luna
-```
-
-The backend fetches available YouTube captions, extracts up to five relevant factual claims using the selected focus, asks OpenAI web search for evidence, and synthesizes a grounded verdict. If captions cannot be retrieved, the extension offers a transcript-paste fallback. API keys remain solely on the backend.
-
-## Test
-
-```bash
-npm test
-```
-
-## API
-
-- `GET /health` verifies the server.
-- `POST /api/analyze` accepts `{ videoId, focus }`, or `{ transcript, focus }` for the fallback.
-
-The implementation intentionally has no authentication, database, framework, or build tooling; each service is isolated so transcript, search, and LLM providers can be swapped during the hackathon.
-
-## Continuing the project
-
-See [CONTINUATION.md](CONTINUATION.md) for the current handoff, configuration, known limitations, troubleshooting, and suggested next work.
+It ships in **demo mode**: verdicts appear instantly with no API key, so a live demo never depends on a third-party API. Set `DEMO_MODE=false` and add `LLM_API_KEY` in `.env` for live analysis.
