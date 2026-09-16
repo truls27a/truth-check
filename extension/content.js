@@ -19,8 +19,11 @@ let liveAnalysis = null;
 let captionBuffer = [];
 const CAPTION_CONTAINER_SELECTOR = '.ytp-caption-window-container';
 const CAPTION_SEGMENT_SELECTOR = '.ytp-caption-segment';
+let liveChecks = [];
+let lastCheckedBufferLength = 0;
+let liveCheckInFlight = false;
 const root = document.createElement('div'); root.id = 'truthcheck-root';
-root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
+root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" aria-label="TruthCheck panel"><header><div><strong>TruthCheck</strong><small>Verify claims as you watch</small></div><button class="tc-close" aria-label="Close">×</button></header><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></aside>`;
 document.documentElement.append(root);
 const $ = s => root.querySelector(s); const panel = $('#tc-panel');
 $('.tc-close').onclick = () => panel.classList.remove('open');
@@ -32,11 +35,13 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 makeDraggable(panel, panel.querySelector('header'));
 makeDraggable($('#tc-caption-overlay'), $('#tc-caption-overlay').querySelector('b'));
+makeDraggable($('#tc-live-overlay'), $('#tc-live-overlay').querySelector('b'));
 document.addEventListener('yt-navigate-finish', checkForVideoChange);
 // YouTube is a single-page app; polling the URL also covers navigation paths
 // where its custom event is missed by a content script.
 setInterval(checkForVideoChange, 500);
 setInterval(updateLiveClaims, 500);
+setInterval(pollLiveCheck, 8000);
 watchCaptions(onCaptionText);
 
 // Lets the user reposition the floating panel by dragging its header.
@@ -70,7 +75,10 @@ function checkForVideoChange() {
   activeVideoId = id;
   liveAnalysis = null;
   captionBuffer = [];
+  liveChecks = [];
+  lastCheckedBufferLength = 0;
   onCaptionText('');
+  renderLiveChecks();
   renderEmpty(id ? 'New video detected. Ready to analyze.' : 'Open a YouTube video to analyze it.');
 }
 
@@ -128,6 +136,54 @@ function onCaptionText(text) {
   if (last?.text === text) return;
   captionBuffer.push({ time: document.querySelector('video')?.currentTime ?? null, text });
   if (captionBuffer.length > 200) captionBuffer.shift();
+}
+
+// Sends newly-seen caption text (since the last successful check) to the
+// backend's live fact-checking agent (server/services/liveCheck.js). Runs
+// continuously in the background, independent of the panel — results show
+// up in the always-visible #tc-live-overlay window, not the panel.
+async function pollLiveCheck() {
+  if (liveCheckInFlight) return;
+  const player = document.querySelector('video');
+  if (!videoId() || player?.paused) return; // mirrors "pausing pauses reveals" elsewhere in this file
+  const newEntries = captionBuffer.slice(lastCheckedBufferLength);
+  const recentText = newEntries.map(e => e.text).join(' ').trim();
+  if (recentText.length < 20) return; // not enough new speech yet to be worth a check
+  lastCheckedBufferLength = captionBuffer.length;
+  liveCheckInFlight = true;
+  try {
+    const response = await fetch(`${API}/api/live-check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recentText, focus: $('#tc-focus').value }) });
+    const data = await response.json();
+    if (data.hasStatement) {
+      liveChecks.unshift(data);
+      if (liveChecks.length > 20) liveChecks.length = 20;
+      renderLiveChecks();
+    }
+  } catch (err) {
+    console.warn('[TruthCheck] live check failed:', err);
+  } finally {
+    liveCheckInFlight = false;
+  }
+}
+function renderLiveChecks() {
+  const list = $('#tc-live-list');
+  const count = $('#tc-live-count');
+  if (!list) return;
+  if (count) count.textContent = liveChecks.length ? ` (${liveChecks.length})` : '';
+  if (!liveChecks.length) {
+    list.innerHTML = '<p class="tc-live-empty">Watching for statements to check…</p>';
+    return;
+  }
+  list.innerHTML = liveChecks.map(liveCard).join('');
+  list.querySelectorAll('.tc-card').forEach(el => el.addEventListener('click', event => {
+    if (event.target.closest('a')) return;
+    el.classList.toggle('expanded');
+  }));
+}
+function liveCard(item) {
+  const status = item.verdict === 'unsure' ? 'uncertain' : item.verdict;
+  const icon = status === 'true' ? '✓' : status === 'false' ? '×' : '!';
+  return `<article class="tc-card ${status}"><div class="tc-verdict"><span>${icon}</span>${item.verdict?.toUpperCase()}</div><h3>${escapeHtml(item.header)}</h3><p>${escapeHtml(item.explanation)}</p><div class="tc-detail">${item.confidence != null ? `<div class="tc-meta">${Math.round(item.confidence * 100)}% confidence</div>` : ''}<b>Statement</b><p class="tc-quote">${escapeHtml(item.statement)}</p><b>Sources</b>${(item.sources || []).map(s => `<a href="${s.url}" target="_blank" rel="noopener">${escapeHtml(s.publisher || s.title)} <span>↗</span></a>`).join('') || '<span class="tc-none">No sources available</span>'}</div></article>`;
 }
 function renderEmpty(message) { $('#tc-results').innerHTML = `<div class="tc-empty"><b>${message}</b></div>`; }
 function renderLoading() { $('#tc-results').innerHTML = `<div class="tc-loading"><i></i><i></i><i></i><p>Finding claims and checking evidence…</p></div>`; }
