@@ -5,7 +5,7 @@
   top: 64px;
   right: 18px;
   z-index: 2147483647;
-  max-width: 300px;
+  width: 300px;
   background: rgba(17, 19, 26, 0.92);
   border: 1px solid #343a4b;
   border-radius: 10px;
@@ -19,7 +19,10 @@
   text-transform: uppercase;
   letter-spacing: .07em;
   color: #9ca3af;
-  margin-bottom: 4px;
+  margin: -9px -12px 4px;
+  padding: 9px 12px 4px;
+  cursor: move;
+  user-select: none;
 }
 #tc-caption-overlay p {
   margin: 0;

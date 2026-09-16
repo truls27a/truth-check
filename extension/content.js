@@ -31,6 +31,7 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'tc-toggle-panel') panel.classList.toggle('open');
 });
 makeDraggable(panel, panel.querySelector('header'));
+makeDraggable($('#tc-caption-overlay'), $('#tc-caption-overlay').querySelector('b'));
 document.addEventListener('yt-navigate-finish', checkForVideoChange);
 // YouTube is a single-page app; polling the URL also covers navigation paths
 // where its custom event is missed by a content script.
