@@ -7,6 +7,7 @@ const $ = id => document.getElementById(id);
 const SESSION_KEY = 'tc.session';
 const ENTITLEMENT_KEY = 'tc.entitlement';
 const UPDATE_NOTICE_KEY = 'tc.updateNotice';
+const AUTH_ERROR_KEY = 'tc.authError';
 
 $('signup').href = TC_CONFIG.apiBase;
 $('pricing').href = TC_CONFIG.pricingUrl;
@@ -44,6 +45,15 @@ $('signed-out').addEventListener('submit', async event => {
   render(state);
 });
 
+// Opens Google sign-in in a tab, which closes this popup; the worker finishes
+// the sign-in and the popup shows the result the next time it opens.
+$('google').addEventListener('click', async () => {
+  $('google').disabled = true;
+  const state = await send('google');
+  $('google').disabled = false;
+  if (state.error) render(state);
+});
+
 $('sign-out').addEventListener('click', async () => {
   $('sign-out').disabled = true;
   render(await send('sign-out'));
@@ -62,6 +72,15 @@ async function setUpPanelButton() {
   });
 }
 
+// A failed Google sign-in finished while the popup was closed.
+async function showAuthError() {
+  const error = (await chrome.storage.local.get(AUTH_ERROR_KEY))[AUTH_ERROR_KEY];
+  if (!error) return;
+  await chrome.storage.local.remove(AUTH_ERROR_KEY);
+  $('error').textContent = error;
+  $('error').hidden = false;
+}
+
 // Shown once per new minimum version, then remembered as shown.
 async function showUpdateNotice() {
   const notice = (await chrome.storage.local.get(UPDATE_NOTICE_KEY))[UPDATE_NOTICE_KEY];
@@ -77,6 +96,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (SESSION_KEY in changes || ENTITLEMENT_KEY in changes)) refresh();
 });
 
-refresh('refresh');
+refresh('refresh').then(showAuthError);
 setUpPanelButton();
 showUpdateNotice();

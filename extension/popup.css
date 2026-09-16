@@ -17,3 +17,4 @@ button:disabled { opacity: .6; cursor: default; }
 button.secondary { background: #232838; color: #e6e8ed; }
 a { color: #9bb5ff; }
 [hidden] { display: none !important; }
+.divider { text-align: center; margin: 2px 0 8px; }

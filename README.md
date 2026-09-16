@@ -27,7 +27,7 @@ Extraction and verification run on the [TruthCheck website](https://truth-check-
 
 1. **Clone** this repo: `git clone https://github.com/truthcheck/truthcheck.git`
 2. Open **`chrome://extensions`**, turn on **Developer mode**, click **Load unpacked**, and select the `extension` folder.
-3. Click the TruthCheck icon in the toolbar and **sign in** with your TruthCheck account. Your plan (Free or Pro) carries over automatically.
+3. Click the TruthCheck icon in the toolbar and **sign in** with your TruthCheck account (Google or email and password). Your plan (Free or Pro) carries over automatically.
 
 Then open a YouTube video with captions on, or highlight text on any page and right-click **Fact-check with TruthCheck**. On YouTube, open the full panel from the toolbar popup.
 

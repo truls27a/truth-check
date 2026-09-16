@@ -3,9 +3,10 @@
 // can rotate the refresh token.
 //
 // Talks to Supabase's auth REST endpoints directly instead of vendoring
-// supabase-js: the extension has no bundler, and password sign-in, refresh and
-// logout are all it needs. The session lives in chrome.storage.local — MV3
-// service workers have no localStorage — and nothing here is ever logged.
+// supabase-js: the extension has no bundler, and password sign-in, Google
+// token hand-off, refresh and logout are all it needs. The session lives in
+// chrome.storage.local — MV3 service workers have no localStorage — and
+// nothing here is ever logged.
 globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storage, fetchImpl, now = () => Date.now() }) {
   const SESSION_KEY = 'tc.session';
   const ENTITLEMENT_KEY = 'tc.entitlement';
@@ -44,6 +45,57 @@ globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storag
     await tokenRequest('password', { email, password });
     await getEntitlement({ force: true });
     return getState();
+  }
+
+  // Google sign-in goes through Lovable Cloud's OAuth broker (the Supabase
+  // project has no Google secret of its own). The broker only redirects back
+  // to the website's own origin, so the worker opens this URL in a tab and
+  // reads the tokens off the redirect (see parseOAuthRedirect).
+  function googleSignInUrl(state) {
+    const params = new URLSearchParams({ provider: 'google', redirect_uri: `${config.apiBase}/`, state });
+    return `${config.apiBase}/~oauth/initiate?${params}`;
+  }
+
+  // null means "not the broker's redirect (yet)"; otherwise { tokens } or { error }.
+  function parseOAuthRedirect(url, expectedState) {
+    let parsed;
+    try { parsed = new URL(url); } catch { return null; }
+    if (parsed.origin !== new URL(config.apiBase).origin) return null;
+    const params = new URLSearchParams(parsed.hash.slice(1));
+    for (const [key, value] of parsed.searchParams) if (!params.has(key)) params.set(key, value);
+    if (!params.has('state') || !(params.has('access_token') || params.has('error'))) return null;
+    if (params.get('state') !== expectedState) return { error: 'Google sign-in could not be verified. Try again.' };
+    if (params.get('error')) return { error: params.get('error_description') || 'Google sign-in failed. Try again.' };
+    if (!params.get('refresh_token')) return { error: 'Google sign-in failed. Try again.' };
+    return { tokens: { access_token: params.get('access_token'), refresh_token: params.get('refresh_token'), expires_in: Number(params.get('expires_in')) || null, expires_at: Number(params.get('expires_at')) || null } };
+  }
+
+  // Validates broker tokens against Supabase before storing them. Deliberately
+  // not a refresh: rotating the token here could trip Supabase's reuse
+  // detection if the website tab also held on to it.
+  async function signInWithTokens(tokens) {
+    await clear();
+    const response = await fetchImpl(`${config.supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: config.supabaseKey, Authorization: `Bearer ${tokens.access_token}` }
+    });
+    if (!response.ok) throw new Error('Google sign-in failed. Try again.');
+    const user = await response.json();
+    const session = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: tokens.expires_at || tokenExpiry(tokens.access_token) || Math.floor(now() / 1000) + (tokens.expires_in || 3600),
+      user: { id: user.id, email: user.email }
+    };
+    await storage.set({ [SESSION_KEY]: session });
+    await getEntitlement({ force: true });
+    return getState();
+  }
+
+  function tokenExpiry(jwt) {
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return Number(payload.exp) || null;
+    } catch { return null; }
   }
 
   async function signOut() {
@@ -124,5 +176,5 @@ globalThis.createTruthCheckAuth = function createTruthCheckAuth({ config, storag
     return { signedIn: true, email: session.user?.email, plan: isPro(entitlement) ? 'pro' : 'free', stale: Boolean(entitlement?.stale) };
   }
 
-  return { SESSION_KEY, ENTITLEMENT_KEY, signIn, signOut, getAccessToken, authorizedFetch, getEntitlement, isPro, getState };
+  return { SESSION_KEY, ENTITLEMENT_KEY, signIn, googleSignInUrl, parseOAuthRedirect, signInWithTokens, signOut, getAccessToken, authorizedFetch, getEntitlement, isPro, getState };
 };

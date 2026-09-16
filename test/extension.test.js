@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 // The extension files are classic scripts that assign to globalThis, so load
-// them into a sandbox the same way importScripts would.
-const context = vm.createContext({});
+// them into a sandbox the same way importScripts would, with the web globals a
+// service worker provides.
+const context = vm.createContext({ URL, URLSearchParams, atob });
 for (const file of ['config.js', 'api.js', 'auth.js']) {
   vm.runInContext(readFileSync(new URL(`../extension/${file}`, import.meta.url), 'utf8'), context, { filename: file });
 }
@@ -215,4 +216,49 @@ test('an entitlement 401 that survives a refresh forces re-authentication', asyn
   await assert.doesNotReject(auth.signIn('reader@example.com', 'secret'));
   assert.deepEqual(Object.keys(storage.data), []);
   assert.equal((await auth.getState()).signedIn, false);
+});
+
+test('Google sign-in starts at the website OAuth broker and returns to the website', () => {
+  const { auth } = setup({});
+  const url = new URL(auth.googleSignInUrl('state-1'));
+  assert.equal(`${url.origin}${url.pathname}`, 'https://truth-check-tool.lovable.app/~oauth/initiate');
+  assert.equal(url.searchParams.get('provider'), 'google');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://truth-check-tool.lovable.app/');
+  assert.equal(url.searchParams.get('state'), 'state-1');
+});
+
+test('reads Google tokens from the broker redirect only when the state matches', () => {
+  const { auth } = setup({});
+  const base = TC_CONFIG.apiBase;
+  assert.equal(auth.parseOAuthRedirect(`${base}/~oauth/initiate?provider=google&state=s1`, 's1'), null, 'the outgoing request is not a redirect');
+  assert.equal(auth.parseOAuthRedirect(`${base}/pricing`, 's1'), null);
+  assert.equal(auth.parseOAuthRedirect(`https://evil.example/#access_token=a&refresh_token=r&state=s1`, 's1'), null);
+  const fromHash = auth.parseOAuthRedirect(`${base}/#access_token=a&refresh_token=r&expires_in=3600&state=s1`, 's1');
+  assert.deepEqual({ ...fromHash.tokens }, { access_token: 'a', refresh_token: 'r', expires_in: 3600, expires_at: null });
+  assert.equal(auth.parseOAuthRedirect(`${base}/?access_token=a&refresh_token=r&state=s1`, 's1').tokens.refresh_token, 'r');
+  assert.match(auth.parseOAuthRedirect(`${base}/#access_token=a&refresh_token=r&state=other`, 's1').error, /could not be verified/);
+  assert.equal(auth.parseOAuthRedirect(`${base}/?error=access_denied&error_description=User%20cancelled&state=s1`, 's1').error, 'User cancelled');
+  assert.match(auth.parseOAuthRedirect(`${base}/#access_token=a&state=s1`, 's1').error, /failed/);
+});
+
+test('Google tokens are verified with Supabase and stored with the JWT expiry', async () => {
+  const exp = 1_000_003_600;
+  const jwt = `x.${Buffer.from(JSON.stringify({ exp })).toString('base64url')}.y`;
+  const { auth, storage, calls } = setup({
+    [`${TC_CONFIG.supabaseUrl}/auth/v1/user`]: (_url, init) => {
+      assert.equal(init.headers.Authorization, `Bearer ${jwt}`);
+      return reply(200, { id: 'user-1', email: 'reader@gmail.com' });
+    },
+    [ENTITLEMENT_URL]: () => reply(200, { plan: 'free' })
+  });
+  const state = await auth.signInWithTokens({ access_token: jwt, refresh_token: 'r' });
+  assert.deepEqual({ ...state }, { signedIn: true, email: 'reader@gmail.com', plan: 'free', stale: false });
+  assert.equal(storage.data['tc.session'].expires_at, exp);
+  assert.equal(calls.some(c => c.url.startsWith(TOKEN_URL)), false, 'the refresh token is not rotated');
+});
+
+test('rejected Google tokens leave the user signed out', async () => {
+  const { auth, storage } = setup({ [`${TC_CONFIG.supabaseUrl}/auth/v1/user`]: () => reply(401, {}) });
+  await assert.rejects(auth.signInWithTokens({ access_token: 'bad', refresh_token: 'bad' }), /Google sign-in failed/);
+  assert.deepEqual(Object.keys(storage.data), []);
 });
