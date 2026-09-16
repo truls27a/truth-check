@@ -43,22 +43,36 @@ let liveCheckInFlight = false;
 let liveNotice = null;
 let liveBackoffUntil = 0;
 let liveAllowanceUsed = false;
+// Visibility of the live fact-check window (#tc-live-overlay), the surface the
+// toolbar button opens. It starts closed, opens itself when the first check
+// lands, and once the user closes it stays closed — otherwise the next poll,
+// 15s later, would pop it straight back open.
+let liveOpen = false;
+let liveDismissed = false;
 const root = document.createElement('div'); root.id = 'truthcheck-root';
-root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay"><b>Live fact-checks<span id="tc-live-count"></span></b><div id="tc-live-list" class="tc-ui"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" class="tc-ui" aria-label="TruthCheck panel"><div class="rail-head"><div>${TC.icons.logo}<span>TruthCheck</span></div><button class="tc-close" aria-label="Close evidence panel">${TC.icons.close}</button></div><div class="tc-scroll"><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></div><div class="rail-controls" id="tc-rail-controls" hidden><button id="tc-prev" aria-label="Previous claim">${TC.icons.arrowLeft}</button><span id="tc-rail-count"></span><button id="tc-next" aria-label="Next claim">${TC.icons.arrowRight}</button></div><div class="rail-foot">${TC.icons.shieldCheck}<span>Evidence stays linked to the words.</span></div></aside>`;
+root.innerHTML = `<div id="tc-caption-overlay"><b>TruthCheck sees</b><p id="tc-caption-text" aria-live="polite">Waiting for captions&hellip; (turn on CC and press play)</p></div><div id="tc-live-overlay" class="tc-ui"><b>Live fact-checks<span id="tc-live-count"></span><button class="tc-close" aria-label="Close fact-check window">${TC.icons.close}</button></b><div id="tc-live-list"><p class="tc-live-empty">Watching for statements to check&hellip;</p></div></div><aside id="tc-panel" class="tc-ui" aria-label="TruthCheck panel"><div class="rail-head"><div>${TC.icons.logo}<span>TruthCheck</span></div><button class="tc-close" aria-label="Close evidence panel">${TC.icons.close}</button></div><div class="tc-scroll"><section class="tc-controls"><label>Focus<select id="tc-focus">${focuses.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select></label><label class="tc-live"><input id="tc-live" type="checkbox" checked> Reveal claims as video plays</label><button id="tc-analyze">Analyze video <span>→</span></button><p id="tc-hint"></p></section><section id="tc-results"><div class="tc-empty"><b>Ready to check</b><p>Analyze this video's captions to find and verify important factual claims.</p></div></section></div><div class="rail-controls" id="tc-rail-controls" hidden><button id="tc-prev" aria-label="Previous claim">${TC.icons.arrowLeft}</button><span id="tc-rail-count"></span><button id="tc-next" aria-label="Next claim">${TC.icons.arrowRight}</button></div><div class="rail-foot">${TC.icons.shieldCheck}<span>Evidence stays linked to the words.</span></div></aside>`;
 root.insertAdjacentHTML('afterbegin', `<style>${TC.CSS}</style>`);
 document.documentElement.append(root);
 const $ = s => root.querySelector(s); const panel = $('#tc-panel');
 // The caption pipeline (captionBuffer, the live fact-checker) keeps running
 // regardless of this setting — it only hides the readout box itself.
 if (!TC_CONFIG.showCaptionOverlay) $('#tc-caption-overlay').style.display = 'none';
-$('.tc-close').onclick = () => panel.classList.remove('open');
+// Scoped selectors: both the panel and the live window carry a .tc-close, and
+// the live window comes first in the markup above.
+$('#tc-panel .tc-close').onclick = () => panel.classList.remove('open');
+$('#tc-live-overlay .tc-close').onclick = () => setLiveOpen(false);
 $('#tc-analyze').onclick = analyze;
 $('#tc-prev').onclick = () => { railIndex = Math.max(0, railIndex - 1); renderRail(); };
 $('#tc-next').onclick = () => { railIndex = Math.min(railClaims.length - 1, railIndex + 1); renderRail(); };
-// Panel is opened/closed from the toolbar icon (see background.js) rather
-// than an in-page button.
+// The toolbar button (see popup.js) opens the live fact-check window — empty
+// to begin with, then checks appear in it as the video plays. It deliberately
+// does not open #tc-panel: the one-shot "analyze the whole video" overview is
+// a different, non-live flow.
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'tc-toggle-panel') panel.classList.toggle('open');
+  if (message?.type !== 'tc-toggle-panel') return;
+  // An explicit reopen clears an earlier dismissal.
+  if (!liveOpen) liveDismissed = false;
+  setLiveOpen(!liveOpen);
 });
 makeDraggable(panel, panel.querySelector('.rail-head'));
 makeDraggable($('#tc-caption-overlay'), $('#tc-caption-overlay').querySelector('b'));
@@ -202,11 +216,19 @@ function onLiveError(data) {
   liveNotice = data;
   renderLiveChecks();
 }
+// Closing the window is sticky (see liveDismissed) — only an explicit reopen
+// from the toolbar clears it.
+function setLiveOpen(open) {
+  liveOpen = open;
+  if (!open) liveDismissed = true;
+  $('#tc-live-overlay').classList.toggle('is-open', open);
+}
 function renderLiveChecks() {
   const list = $('#tc-live-list');
   const count = $('#tc-live-count');
   if (!list) return;
-  $('#tc-live-overlay').classList.toggle('has-content', Boolean(liveChecks.length || liveNotice));
+  // Surface the window on the first result, unless the user closed it.
+  if (!liveDismissed && (liveChecks.length || liveNotice)) setLiveOpen(true);
   if (count) count.textContent = liveChecks.length ? ` (${liveChecks.length})` : '';
   const notice = liveNotice ? TC.errorHtml(liveNotice) : '';
   if (!liveChecks.length) {

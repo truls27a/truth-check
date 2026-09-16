@@ -12,84 +12,90 @@
 // Loaded twice on YouTube: once via the manifest, once via executeScript. It
 // must therefore be re-entrant — assign to globalThis, and never declare a
 // top-level const/let/class.
+//
+// Every length below is in px, never rem/em. `rem` resolves against the HOST
+// PAGE's root element, which we don't control and can't override from here:
+// `all:initial` on our container doesn't rebase it. YouTube ships
+// `html{font-size:10px}`, which silently rendered this whole card at 62.5%
+// scale there while looking correct on a default 16px page.
 globalThis.TC = {
   CSS: `.tc-ui{color:var(--foreground);font-family:Manrope,ui-sans-serif,system-ui,sans-serif}
-.tc-close{background:transparent;border:0;color:var(--muted-foreground);cursor:pointer;border-radius:.35rem;display:grid;place-items:center;width:1.8rem;height:1.8rem;transition:background-color .15s}
+.tc-close{background:transparent;border:0;color:var(--muted-foreground);cursor:pointer;border-radius:6px;display:grid;place-items:center;width:30px;height:30px;transition:background-color .15s}
 .tc-close:hover{background:var(--accent)}
-.tc-close svg{width:1rem;height:1rem}
-.tc-empty{color:var(--muted-foreground);padding:2.5rem .9rem;text-align:center;font-size:.8rem;line-height:1.5}
-.tc-empty b{color:var(--foreground);font-size:.85rem}
-.tc-demo{font-size:.58rem;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em;font-weight:800;margin:0 .9rem .55rem}
-.tc-remaining{color:var(--muted-foreground);font-size:.68rem;margin:0 .9rem .7rem}
-.tc-loading{text-align:center;padding:2.6rem 0;color:var(--muted-foreground);font-size:.75rem}
+.tc-close svg{width:17px;height:17px}
+.tc-empty{color:var(--muted-foreground);padding:40px 14px;text-align:center;font-size:14px;line-height:1.5}
+.tc-empty b{color:var(--foreground);font-size:15px}
+.tc-demo{font-size:10px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.08em;font-weight:800;margin:0 14px 9px}
+.tc-remaining{color:var(--muted-foreground);font-size:12px;margin:0 14px 11px}
+.tc-loading{text-align:center;padding:42px 0;color:var(--muted-foreground);font-size:13px}
 .tc-loading i{display:inline-block;width:6px;height:6px;margin:0 2px;border-radius:50%;background:var(--signal);animation:tcPulse 1s infinite alternate}
 .tc-loading i:nth-child(2){animation-delay:.2s}
 .tc-loading i:nth-child(3){animation-delay:.4s}
 @keyframes tcPulse{to{opacity:.25;transform:translateY(-4px)}}
-.tc-empty a.tc-upsell{display:inline-block;margin-top:.6rem;color:var(--foreground);text-decoration:underline}
+.tc-empty a.tc-upsell{display:inline-block;margin-top:10px;color:var(--foreground);text-decoration:underline}
 
 /* --- rail head: logo + close --- */
-.rail-head{border-bottom:1px solid var(--border);justify-content:space-between;align-items:center;min-height:3.1rem;padding:.7rem .85rem;font-weight:800;display:flex}
-.rail-head>div{align-items:center;gap:.5rem;display:flex}
-.rail-head span{font-size:.95rem;letter-spacing:-.01em}
+.rail-head{border-bottom:1px solid var(--border);justify-content:space-between;align-items:center;min-height:50px;padding:11px 14px;font-weight:800;display:flex}
+.rail-head>div{align-items:center;gap:8px;display:flex}
+.rail-head span{font-size:16px;letter-spacing:-.01em}
 
 /* --- rail progress: "Claim x of y" + dots --- */
-.rail-progress{padding:.85rem .9rem .75rem;border-bottom:1px solid var(--border)}
-.rail-progress>span{color:var(--muted-foreground);font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
-.rail-progress>div{grid-template-columns:repeat(var(--tc-claim-count,3),1fr);gap:.25rem;margin-top:.5rem;display:grid}
-.rail-progress button{opacity:.25;background:var(--muted-foreground);border-radius:1rem;height:.25rem;border:0;padding:0;cursor:pointer}
+.rail-progress{padding:14px 14px 12px;border-bottom:1px solid var(--border)}
+.rail-progress>span{color:var(--muted-foreground);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.rail-progress>div{grid-template-columns:repeat(var(--tc-claim-count,3),1fr);gap:4px;margin-top:8px;display:grid}
+.rail-progress button{opacity:.25;background:var(--muted-foreground);border-radius:16px;height:4px;border:0;padding:0;cursor:pointer}
 .rail-progress button.is-active{opacity:1}
 .rail-progress button.progress-true{background:var(--true)}
 .rail-progress button.progress-false{background:var(--false)}
 .rail-progress button.progress-uncertain{background:var(--uncertain)}
 
 /* --- verdict panel: icon, claim, evidence, source --- */
-.verdict-panel{padding:.9rem}
-.verdict-top{align-items:center;gap:.65rem;display:flex}
-.verdict-icon{width:2.15rem;height:2.15rem;color:var(--background);border-radius:50%;place-items:center;display:grid;flex:none}
-.verdict-icon svg{width:1.1rem;height:1.1rem}
+.verdict-panel{padding:14px}
+.verdict-top{align-items:center;gap:10px;display:flex}
+.verdict-icon{width:34px;height:34px;color:var(--background);border-radius:50%;place-items:center;display:grid;flex:none}
+.verdict-icon svg{width:18px;height:18px}
 .verdict-icon-true{background:var(--true)}
 .verdict-icon-false{background:var(--false)}
 .verdict-icon-uncertain{background:var(--uncertain)}
-.verdict-top small{display:block;color:var(--muted-foreground);font-size:.58rem;font-weight:800;letter-spacing:.06em}
-.verdict-top strong{font-size:1.05rem;line-height:1.2}
-.verdict-panel>p{margin:.9rem 0;font-weight:650;line-height:1.45;font-size:.88rem}
-.evidence-block{border-left:3px solid var(--foreground);padding:.15rem 0 .15rem .7rem}
+.verdict-top small{display:block;color:var(--muted-foreground);font-size:10px;font-weight:800;letter-spacing:.06em}
+.verdict-top strong{font-size:18px;line-height:1.2}
+.verdict-panel>p{margin:14px 0;font-weight:650;line-height:1.45;font-size:15px}
+.evidence-block{border-left:3px solid var(--foreground);padding:2px 0 2px 11px}
 .evidence-block.evidence-true{border-color:var(--true)}
 .evidence-block.evidence-false{border-color:var(--false)}
 .evidence-block.evidence-uncertain{border-color:var(--uncertain)}
-.evidence-block>span{text-transform:uppercase;align-items:center;gap:.3rem;font-size:.58rem;font-weight:850;letter-spacing:.04em;display:flex;color:var(--muted-foreground)}
-.evidence-block svg{width:.75rem;height:.75rem}
-.evidence-block p{color:var(--muted-foreground);margin:.35rem 0 0;line-height:1.5;font-size:.8rem}
-.verdict-panel>a{border:1px solid var(--border);background:var(--muted);border-radius:.35rem;justify-content:space-between;align-items:center;margin-top:1rem;padding:.7rem;display:flex;text-decoration:none;color:inherit}
+.evidence-block>span{text-transform:uppercase;align-items:center;gap:5px;font-size:10px;font-weight:850;letter-spacing:.04em;display:flex;color:var(--muted-foreground)}
+.evidence-block svg{width:12px;height:12px}
+.evidence-block p{color:var(--muted-foreground);margin:6px 0 0;line-height:1.5;font-size:14px}
+.verdict-panel>a{border:1px solid var(--border);background:var(--muted);border-radius:6px;justify-content:space-between;align-items:center;margin-top:16px;padding:11px;display:flex;text-decoration:none;color:inherit}
 .verdict-panel>a:hover{border-color:var(--signal)}
-.verdict-panel>a small{display:block;color:var(--muted-foreground);font-size:.55rem;font-weight:800;letter-spacing:.06em}
-.verdict-panel>a strong{font-size:.82rem;font-weight:700}
-.verdict-panel>a svg{width:.85rem;height:.85rem;color:var(--muted-foreground);flex:none}
-.verdict-meta{color:var(--muted-foreground);font-size:.68rem;margin:-.5rem 0 .9rem}
+.verdict-panel>a small{display:block;color:var(--muted-foreground);font-size:10px;font-weight:800;letter-spacing:.06em}
+.verdict-panel>a strong{font-size:14px;font-weight:700}
+.verdict-panel>a svg{width:14px;height:14px;color:var(--muted-foreground);flex:none}
+.verdict-meta{color:var(--muted-foreground);font-size:12px;margin:-8px 0 14px}
 .verdict-meta a{color:inherit;text-decoration:underline;cursor:pointer}
 .verdict-meta .tc-quote{font-style:italic}
 
 /* --- rail controls: prev/next + counter --- */
-.rail-controls{border-top:1px solid var(--border);justify-content:space-between;align-items:center;padding:.75rem .9rem;display:flex}
-.rail-controls button{width:1.9rem;height:1.9rem;border:1px solid var(--border);border-radius:.35rem;background:var(--background);color:var(--foreground);display:grid;place-items:center;cursor:pointer;transition:background-color .15s}
+.rail-controls{border-top:1px solid var(--border);justify-content:space-between;align-items:center;padding:12px 14px;display:flex}
+.rail-controls button{width:30px;height:30px;border:1px solid var(--border);border-radius:6px;background:var(--background);color:var(--foreground);display:grid;place-items:center;cursor:pointer;transition:background-color .15s}
 .rail-controls button:hover:not(:disabled){background:var(--accent)}
 .rail-controls button:disabled{opacity:.35;cursor:default}
-.rail-controls button svg{width:1rem;height:1rem}
-.rail-controls span{color:var(--muted-foreground);font-size:.68rem;font-weight:800}
+.rail-controls button svg{width:16px;height:16px}
+.rail-controls span{color:var(--muted-foreground);font-size:12px;font-weight:800}
 
 /* --- rail foot: tagline --- */
-.rail-foot{background:var(--foreground);color:var(--background);align-items:center;gap:.4rem;padding:.6rem .9rem;font-size:.65rem;font-weight:600;display:flex}
-.rail-foot svg{width:.8rem;height:.8rem;color:var(--signal);flex:none}
+.rail-foot{background:var(--foreground);color:var(--background);align-items:center;gap:6px;padding:10px 14px;font-size:11px;font-weight:600;display:flex}
+.rail-foot svg{width:13px;height:13px;color:var(--signal);flex:none}
 
 /* --- compact mini card, used by the live caption ticker (a running list,
    not a single-claim rail) --- */
-.tc-card{background:var(--background);border:1px solid var(--border);border-radius:.5rem;margin:.55rem 0;padding:.7rem}
-.tc-card .verdict-top{gap:.5rem}
-.tc-card .verdict-icon{width:1.6rem;height:1.6rem}
-.tc-card .verdict-icon svg{width:.85rem;height:.85rem}
-.tc-card .verdict-top strong{font-size:.82rem}
-.tc-card .evidence-block{margin-top:.6rem}
+.tc-card{background:var(--background);border:1px solid var(--border);border-radius:8px;margin:9px 0;padding:11px}
+.tc-card .verdict-top{gap:8px}
+.tc-card .verdict-icon{width:26px;height:26px}
+.tc-card .verdict-icon svg{width:14px;height:14px}
+.tc-card .verdict-top strong{font-size:14px}
+.tc-card .evidence-block{margin-top:10px}
 `,
   escapeHtml(value) { const node = document.createElement('span'); node.textContent = value || ''; return node.innerHTML; },
   loadingHtml() { return `<div class="tc-loading"><i></i><i></i><i></i><p>Finding claims and checking evidence…</p></div>`; },

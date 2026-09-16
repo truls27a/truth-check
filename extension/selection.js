@@ -10,11 +10,17 @@ function createTruthCheckSelectionCard() {
   const GAP = 8;
   // Same palette as styles.css (#truthcheck-root) — repeated here because a
   // shadow root doesn't inherit custom properties from outside its host.
-  const SELECTION_CSS = `:host{all:initial;display:block!important;
+  //
+  // `display` must stay a NORMAL declaration here: show()/hide() own it, and
+  // they set it inline on the host, which lives in the outer tree. The cascade
+  // inverts for shadow trees — for important declarations the INNER tree wins —
+  // so a `display:block!important` here outranks hide()'s inline
+  // `display:none!important` and the card can never be dismissed.
+  const SELECTION_CSS = `:host{all:initial;display:block;
     --background:oklch(100% 0 0);--foreground:oklch(14.5% 0 0);--muted:oklch(94.5% 0 0);--muted-foreground:oklch(42% 0 0);
     --border:oklch(89% 0 0);--accent:oklch(92.5% .205 112);--signal:oklch(92.5% .205 112);
     --true:oklch(48% .13 152);--false:oklch(58% .2 29);--uncertain:oklch(63% .14 75)}
-    .tc-selection{position:relative;background:var(--background);border:1px solid var(--border);border-radius:.6rem;box-shadow:0 18px 50px rgba(0,0,0,.18);padding:12px 12px 4px;font:14px/1.4 Manrope,ui-sans-serif,system-ui,sans-serif;box-sizing:border-box}
+    .tc-selection{position:relative;background:var(--background);border:1px solid var(--border);border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.18);padding:12px 12px 4px;font:14px/1.4 Manrope,ui-sans-serif,system-ui,sans-serif;box-sizing:border-box}
     .tc-selection *{box-sizing:border-box}
     .tc-selection .tc-close{position:absolute;top:6px;right:10px;z-index:1}
     .tc-selection .tc-card{margin:0 0 9px}
