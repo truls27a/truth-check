@@ -5,6 +5,7 @@ import { extractClaims } from './services/claims.js';
 import { verifyClaim } from './services/verify.js';
 import { demoClaims, DEMO_TRANSCRIPT } from './services/demo.js';
 import { FOCUS_PRESETS } from './services/focus.js';
+import { checkLiveCaptions } from './services/liveCheck.js';
 
 function send(res, status, body) { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }); res.end(JSON.stringify(body)); }
 function readBody(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', x => raw += x); req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('Invalid JSON body')); } }); }); }
@@ -27,6 +28,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/api/demo-transcript') return send(res, 200, { transcript: DEMO_TRANSCRIPT });
     if (req.method === 'GET' && req.url === '/api/focuses') return send(res, 200, FOCUS_PRESETS);
     if (req.method === 'POST' && req.url === '/api/analyze') return send(res, 200, await analyze(await readBody(req)));
+    if (req.method === 'POST' && req.url === '/api/live-check') return send(res, 200, await checkLiveCaptions(await readBody(req)));
     return send(res, 404, { error: 'Not found' });
   } catch (error) { return send(res, 400, { error: error.message || 'Verification service unavailable.' }); }
 });
