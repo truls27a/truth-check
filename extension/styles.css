@@ -1,1 +1,56 @@
-#truthcheck-root{--bg:#11131a;--ink:#f8fafc;--muted:#9ca3af;--line:#2a2e3b;--blue:#7c9cff;all:initial;font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:var(--ink)}#tc-panel{position:fixed;right:18px;top:76px;width:360px;max-height:72vh;z-index:2147483647;background:var(--bg);border:1px solid #303646;border-radius:18px;box-shadow:0 20px 60px #0009;overflow:auto;opacity:0;transform:scale(.96);transition:opacity .18s ease,transform .18s ease;pointer-events:none}#tc-panel.open{opacity:1;transform:scale(1);pointer-events:auto}#tc-panel *{box-sizing:border-box}#tc-panel header{padding:19px 19px 16px;display:flex;justify-content:space-between;align-items:start;border-bottom:1px solid var(--line);cursor:move;user-select:none}#tc-panel strong{font-size:19px;letter-spacing:-.5px}#tc-panel small{display:block;color:var(--muted);font-size:12px;margin-top:3px}.tc-controls{padding:15px 19px;border-bottom:1px solid var(--line)}.tc-controls label{display:block;color:#c6cad4;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}.tc-controls select{width:100%;margin-top:7px;background:#1b1f2a;color:var(--ink);border:1px solid #343a4b;border-radius:8px;padding:10px;font:13px inherit}.tc-controls>button{margin-top:11px;width:100%;border:0;border-radius:8px;padding:11px;background:linear-gradient(100deg,#7257ee,#5685ee);color:#fff;font:700 13px inherit;cursor:pointer}.tc-controls>button:disabled{opacity:.6}.tc-controls>button span{float:right;font-size:17px;line-height:12px}#tc-results{padding:16px 14px 24px}#tc-results h2{font-size:13px;margin:0 5px 11px}#tc-results h2 em{color:var(--muted);font-style:normal;font-weight:400;float:right}.tc-paste{margin-top:12px;border:1px solid #4b5c95;border-radius:7px;padding:8px;background:#202a46;color:#bdcbff;cursor:pointer}
+/* Palette matches the TruthCheck website (truth-check-tool.lovable.app):
+   light theme, oklch tokens, Manrope type. Declared once here on
+   #truthcheck-root; selection.js repeats the same values on its own :host,
+   since a shadow root doesn't inherit custom properties from this element.
+
+   Lengths are px, never rem — see the note in card.js: rem resolves against
+   the host page's root font size (YouTube's is 10px), which we cannot rebase. */
+#truthcheck-root {
+  all: initial;
+  --background: oklch(100% 0 0);
+  --foreground: oklch(14.5% 0 0);
+  --muted: oklch(94.5% 0 0);
+  --muted-foreground: oklch(42% 0 0);
+  --border: oklch(89% 0 0);
+  --accent: oklch(92.5% .205 112);
+  --signal: oklch(92.5% .205 112);
+  --true: oklch(48% .13 152);
+  --false: oklch(58% .2 29);
+  --uncertain: oklch(63% .14 75);
+  --radius: 6px;
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  color: var(--foreground);
+}
+#tc-panel {
+  position: fixed;
+  right: 18px;
+  top: 76px;
+  width: 400px;
+  max-height: 80vh;
+  z-index: 2147483647;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .18);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: scale(.96);
+  transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none;
+}
+#tc-panel.open { opacity: 1; transform: scale(1); pointer-events: auto; }
+#tc-panel * { box-sizing: border-box; }
+#tc-panel [hidden] { display: none !important; }
+#tc-panel .rail-head { cursor: move; user-select: none; flex: none; }
+#tc-panel .tc-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+#tc-panel .rail-controls, #tc-panel .rail-foot { flex: none; }
+.tc-controls { padding: 13px 14px; border-bottom: 1px solid var(--border); }
+.tc-controls label { display: block; color: var(--muted-foreground); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.tc-controls select { width: 100%; margin-top: 6px; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 6px; padding: 9px; font: 13px inherit; }
+.tc-controls > button { margin-top: 10px; width: 100%; border: 1px solid var(--foreground); border-radius: 6px; padding: 10px; background: var(--foreground); color: var(--background); font: 700 13px inherit; cursor: pointer; }
+.tc-controls > button:disabled { opacity: .6; cursor: default; }
+.tc-controls > button span { float: right; }
+#tc-results { padding: 0; }
+.tc-paste { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 11px; background: var(--muted); color: var(--foreground); cursor: pointer; font: 700 12px inherit; }

@@ -1,24 +1,27 @@
 /* Always-visible readout of the caption text the extension currently sees —
-   independent of the collapsible panel, so it's obvious without opening it. */
+   independent of the collapsible panel, so it's obvious without opening it.
+
+   Lengths are px, never rem — see the note in card.js: rem resolves against
+   the host page's root font size (YouTube's is 10px), which we cannot rebase. */
 #tc-caption-overlay {
   position: fixed;
   top: 64px;
   right: 18px;
   z-index: 2147483647;
-  width: 300px;
-  background: rgba(17, 19, 26, 0.92);
-  border: 1px solid #343a4b;
+  width: 320px;
+  background: var(--background);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
 }
 #tc-caption-overlay b {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .07em;
-  color: #9ca3af;
+  color: var(--muted-foreground);
   margin: -9px -12px 4px;
   padding: 9px 12px 4px;
   cursor: move;
@@ -26,57 +29,64 @@
 }
 #tc-caption-overlay p {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
-  color: var(--ink);
+  color: var(--foreground);
 }
-/* Second floating window: the live fact-check feed. Positioned on the
+/* Second floating window: the live fact-check feed, and the extension's main
+   surface — the toolbar button opens it (see content.js's tc-toggle-panel
+   handler) and checks spawn into it as the video plays. Positioned on the
    opposite (left) side from the caption box and panel so the two don't
    default-overlap; both are draggable if the user wants to rearrange them.
-   Hidden until there is a check or notice to show — nothing appears on load. */
-#tc-live-overlay:not(.has-content) { display: none; }
+   `is-open` is the single source of truth for visibility: nothing appears on
+   load, the first check opens it, and the close button shuts it for good
+   until the toolbar button is used again. */
+#tc-live-overlay:not(.is-open) { display: none; }
 #tc-live-overlay {
   position: fixed;
   top: 64px;
   left: 18px;
   z-index: 2147483647;
-  width: 340px;
-  background: rgba(17, 19, 26, 0.92);
-  border: 1px solid #343a4b;
+  width: 400px;
+  background: var(--background);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 12px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
 }
 #tc-live-overlay > b {
-  display: block;
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .07em;
-  color: #9ca3af;
+  color: var(--muted-foreground);
   margin: -9px -12px 8px;
-  padding: 9px 12px 4px;
+  padding: 6px 8px 6px 12px;
   cursor: move;
   user-select: none;
 }
-#tc-live-overlay > b span { color: #7c9cff; text-transform: none; letter-spacing: 0; }
+#tc-live-overlay > b span { color: var(--foreground); text-transform: none; letter-spacing: 0; }
+/* Pushes the close button to the far edge of the draggable title row. */
+#tc-live-overlay > b .tc-close { margin-left: auto; cursor: pointer; }
 #tc-live-list { max-height: 60vh; overflow-y: auto; }
 #tc-live-list .tc-card { margin-top: 0; margin-bottom: 9px; }
 #tc-live-list .tc-card:last-child { margin-bottom: 0; }
-.tc-live-empty { color: var(--muted); font-size: 12px; margin: 0; padding: 2px; }
+.tc-live-empty { color: var(--muted-foreground); font-size: 13px; margin: 0; padding: 2px; }
 .tc-live {
   display: flex !important;
   align-items: center;
   gap: 7px;
   margin-top: 11px;
-  color: #b9c1d0 !important;
-  font-size: 12px !important;
+  color: var(--foreground) !important;
+  font-size: 13px !important;
   font-weight: 500 !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
 }
-.tc-live input { accent-color: #7c8fff; margin: 0; }
-.tc-live-status { color: #aeb7c7; padding: 35px 12px; text-align: center; font-size: 13px; line-height: 1.5; }
-.tc-live-status span { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #66d8a1; box-shadow: 0 0 0 4px #1a4537; }
-.tc-live-status small { display: block; color: #798397; margin-top: 10px; font-size: 11px; }
-.tc-quote { color: #9fa8ba; font-style: italic; margin: 0 0 10px; }
+.tc-live input { accent-color: var(--foreground); margin: 0; }
+.tc-live-status { color: var(--muted-foreground); padding: 35px 12px; text-align: center; font-size: 14px; line-height: 1.5; }
+.tc-live-status span { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--true); box-shadow: 0 0 0 4px var(--muted); }
+.tc-live-status small { display: block; color: var(--muted-foreground); margin-top: 10px; font-size: 12px; }
