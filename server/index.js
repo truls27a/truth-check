@@ -6,6 +6,7 @@ import { verifyClaim } from './services/verify.js';
 import { demoClaims, DEMO_TRANSCRIPT } from './services/demo.js';
 import { FOCUS_PRESETS } from './services/focus.js';
 import { normalizeSelection, demoSelectionClaim, verifySelection } from './services/selection.js';
+import { checkLiveCaptions } from './services/liveCheck.js';
 
 const MAX_BODY_BYTES = 100_000;
 
@@ -40,6 +41,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/api/focuses') return send(res, 200, FOCUS_PRESETS);
     if (req.method === 'POST' && req.url === '/api/analyze') return send(res, 200, await analyze(await readBody(req)));
     if (req.method === 'POST' && req.url === '/api/check-text') return send(res, 200, await checkText(await readBody(req)));
+    if (req.method === 'POST' && req.url === '/api/live-check') return send(res, 200, await checkLiveCaptions(await readBody(req)));
     return send(res, 404, { error: 'Not found' });
   } catch (error) { return send(res, 400, { error: error.message || 'Verification service unavailable.' }); }
 });

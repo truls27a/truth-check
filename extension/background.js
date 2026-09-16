@@ -12,6 +12,13 @@ const API = 'http://localhost:8787';
 const MENU_ID = 'truthcheck-selection';
 const TIMEOUT_MS = 25000;
 
+// Clicking the toolbar icon toggles the in-page floating panel, instead of
+// opening a browser_action popup.
+chrome.action.onClicked.addListener((tab) => {
+  if (!tab.id) return;
+  chrome.tabs.sendMessage(tab.id, { type: 'tc-toggle-panel' }, () => void chrome.runtime.lastError);
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   // removeAll first so reloading the unpacked extension never hits a duplicate id.
   chrome.contextMenus.removeAll(() => chrome.contextMenus.create({

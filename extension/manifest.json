@@ -5,6 +5,7 @@
   "description": "Verify factual claims as you watch YouTube, or fact-check any text you select.",
   "permissions": ["contextMenus", "scripting", "activeTab"],
   "host_permissions": ["http://localhost:8787/*"],
+  "action": { "default_title": "TruthCheck — click to open the panel" },
   "background": { "service_worker": "background.js" },
   "content_scripts": [{ "matches": ["https://www.youtube.com/*"], "js": ["card.js", "content.js"], "css": ["styles.css", "live.css"], "run_at": "document_idle" }]
 }
